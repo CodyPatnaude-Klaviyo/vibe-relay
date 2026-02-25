@@ -3,7 +3,6 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createProject, listProjects } from "../api/projects";
 import { NewProjectModal } from "../components/NewProjectModal";
-import { StatusBadge } from "../components/StatusBadge";
 
 export function ProjectList() {
   const navigate = useNavigate();
@@ -41,7 +40,7 @@ export function ProjectList() {
           onClick={() => setShowModal(true)}
           style={{
             padding: "8px 20px",
-            background: "var(--phase-coder)",
+            background: "#3b82f6",
             color: "#fff",
             border: "none",
             borderRadius: "var(--badge-radius)",
@@ -102,7 +101,19 @@ export function ProjectList() {
                 }}
               >
                 <span style={{ fontSize: "16px", fontWeight: 600 }}>{project.title}</span>
-                <StatusBadge status={project.status} />
+                <span
+                  style={{
+                    background: project.status === "active" ? "var(--status-done)22" : "var(--status-cancelled)22",
+                    color: project.status === "active" ? "var(--status-done)" : "var(--status-cancelled)",
+                    border: `1px solid ${project.status === "active" ? "var(--status-done)44" : "var(--status-cancelled)44"}`,
+                    padding: "2px 8px",
+                    borderRadius: "var(--badge-radius)",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                  }}
+                >
+                  {project.status}
+                </span>
               </div>
               {project.description && (
                 <div

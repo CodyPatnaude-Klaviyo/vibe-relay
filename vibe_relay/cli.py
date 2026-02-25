@@ -2,7 +2,7 @@
 
 Commands:
     vibe-relay init       — scaffold config and agent prompts in current directory
-    vibe-relay serve      — start the API server (placeholder)
+    vibe-relay serve      — start the API server
     vibe-relay mcp        — start the MCP server (stdio transport)
     vibe-relay run-agent  — launch a Claude agent for a specific task
 """
@@ -22,24 +22,13 @@ DEFAULT_CONFIG = {
     "db_path": "~/.vibe-relay/vibe-relay.db",
     "max_parallel_agents": 3,
     "port_range": [4000, 4099],
-    "agents": {
-        "planner": {
-            "model": "claude-opus-4-5",
-            "system_prompt_file": "agents/planner.md",
-        },
-        "coder": {
-            "model": "claude-sonnet-4-5",
-            "system_prompt_file": "agents/coder.md",
-        },
-        "reviewer": {
-            "model": "claude-sonnet-4-5",
-            "system_prompt_file": "agents/reviewer.md",
-        },
-        "orchestrator": {
-            "model": "claude-opus-4-5",
-            "system_prompt_file": "agents/orchestrator.md",
-        },
-    },
+    "default_model": "claude-sonnet-4-5",
+    "default_workflow": [
+        {"name": "Plan", "system_prompt_file": "agents/planner.md"},
+        {"name": "Implement", "system_prompt_file": "agents/coder.md"},
+        {"name": "Review", "system_prompt_file": "agents/reviewer.md"},
+        {"name": "Done"},
+    ],
 }
 
 # Default agent prompt files bundled with the package

@@ -6,6 +6,7 @@ go through the MCP tools (source of truth for business logic).
 
 import sqlite3
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -14,8 +15,8 @@ from fastapi.websockets import WebSocket, WebSocketDisconnect
 from api.deps import (
     get_agent_runs,
     get_db,
-    get_task_counts_by_status,
-    get_tasks_grouped_by_status,
+    get_task_counts_by_step,
+    get_tasks_grouped_by_step,
 )
 from api.models import (
     AgentRunResponse,
@@ -28,35 +29,98 @@ from api.models import (
     TaskDetailResponse,
     TaskResponse,
     UpdateTaskRequest,
+    WorkflowStepResponse,
 )
 from api.ws import manager
 from vibe_relay.mcp.events import emit_event
 from vibe_relay.mcp.tools import (
     add_comment,
+    cancel_task,
     create_project,
     create_task,
+    create_workflow_steps,
     get_task,
-    update_task_status,
+    get_workflow_steps,
+    move_task,
+    uncancel_task,
 )
 
 router = APIRouter()
 
 
 def _check_error(result: dict[str, Any]) -> None:
-    """Convert MCP tool error dicts to HTTPException.
-
-    MCP tools return {"error": "...", "message": "..."} on failure.
-    This helper maps known error types to HTTP status codes.
-    """
+    """Convert MCP tool error dicts to HTTPException."""
     if "error" not in result:
         return
     error = result["error"]
     message = result.get("message", "Unknown error")
     if error == "not_found":
         raise HTTPException(status_code=404, detail=message)
-    if error in ("invalid_transition", "invalid_phase", "invalid_role"):
+    if error in ("invalid_transition", "invalid_input", "invalid_role"):
         raise HTTPException(status_code=422, detail=message)
     raise HTTPException(status_code=400, detail=message)
+
+
+def _resolve_workflow_steps(
+    body: CreateProjectRequest, config: dict[str, Any] | None = None
+) -> list[dict[str, Any]]:
+    """Resolve workflow steps from request body or config defaults.
+
+    Returns a list of step dicts with 'name' and optionally 'system_prompt', 'model', 'color'.
+    """
+    if body.workflow_steps:
+        steps = []
+        for ws in body.workflow_steps:
+            step: dict[str, Any] = {"name": ws.name}
+            if ws.system_prompt:
+                step["system_prompt"] = ws.system_prompt
+            elif ws.system_prompt_file:
+                # Read system prompt from file
+                repo_path = config.get("repo_path", ".") if config else "."
+                prompt_path = Path(repo_path) / ws.system_prompt_file
+                if prompt_path.exists():
+                    step["system_prompt"] = prompt_path.read_text()
+            if ws.model:
+                step["model"] = ws.model
+            if ws.color:
+                step["color"] = ws.color
+            steps.append(step)
+        return steps
+
+    # Use config defaults
+    if config and "default_workflow" in config:
+        steps = []
+        repo_path = config.get("repo_path", ".")
+        for ws_def in config["default_workflow"]:
+            step = {"name": ws_def["name"]}
+            if "system_prompt_file" in ws_def:
+                prompt_path = Path(repo_path) / ws_def["system_prompt_file"]
+                if prompt_path.exists():
+                    step["system_prompt"] = prompt_path.read_text()
+            if "model" in ws_def:
+                step["model"] = ws_def["model"]
+            if "color" in ws_def:
+                step["color"] = ws_def["color"]
+            steps.append(step)
+        return steps
+
+    # Bare minimum: Plan, Implement, Review, Done
+    return [
+        {"name": "Plan"},
+        {"name": "Implement"},
+        {"name": "Review"},
+        {"name": "Done"},
+    ]
+
+
+# Store config reference for workflow step resolution
+_config: dict[str, Any] | None = None
+
+
+def set_config(config: dict[str, Any] | None) -> None:
+    """Set the config dict for workflow step resolution."""
+    global _config  # noqa: PLW0603
+    _config = config
 
 
 # ── Project endpoints ──────────────────────────────────────
@@ -67,24 +131,37 @@ def create_project_endpoint(
     body: CreateProjectRequest,
     conn: sqlite3.Connection = Depends(get_db),
 ) -> dict[str, Any]:
-    """Create a new project and a root planner task, auto-started."""
+    """Create a new project with workflow steps and a root task at the first agent step."""
     project = create_project(conn, title=body.title, description=body.description)
     _check_error(project)
 
+    # Create workflow steps
+    step_defs = _resolve_workflow_steps(body, _config)
+    steps_result = create_workflow_steps(conn, project["id"], step_defs)
+    _check_error(steps_result)
+
+    # Find first step with an agent (system_prompt)
+    first_agent_step = None
+    for s in steps_result["steps"]:
+        if s["has_agent"]:
+            first_agent_step = s
+            break
+
+    # If no agent steps, use first step
+    if first_agent_step is None:
+        first_agent_step = steps_result["steps"][0]
+
+    # Create root task at the first agent step
     root_task = create_task(
         conn,
         title=f"Plan: {body.title}",
         description=body.description,
-        phase="planner",
+        step_id=first_agent_step["id"],
         project_id=project["id"],
     )
     _check_error(root_task)
 
-    # Auto-start the planner — triggers agent launch via trigger processor
-    started = update_task_status(conn, root_task["id"], "in_progress")
-    _check_error(started)
-
-    return {"project": project, "task": started}
+    return {"project": project, "task": root_task}
 
 
 @router.get("/projects", response_model=list[ProjectResponse])
@@ -101,13 +178,13 @@ def get_project(
     project_id: str,
     conn: sqlite3.Connection = Depends(get_db),
 ) -> dict[str, Any]:
-    """Get a project with task counts by status."""
+    """Get a project with task counts by step."""
     row = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
 
     result = dict(row)
-    result["tasks"] = get_task_counts_by_status(conn, project_id)
+    result["tasks"] = get_task_counts_by_step(conn, project_id)
     return result
 
 
@@ -133,6 +210,20 @@ def delete_project(
     return {"status": "cancelled"}
 
 
+# ── Workflow step endpoints ─────────────────────────────────
+
+
+@router.get("/projects/{project_id}/steps", response_model=list[WorkflowStepResponse])
+def list_project_steps(
+    project_id: str,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """Return ordered workflow steps for a project."""
+    result = get_workflow_steps(conn, project_id)
+    _check_error(result)
+    return result["steps"]
+
+
 # ── Task endpoints ─────────────────────────────────────────
 
 
@@ -144,12 +235,12 @@ def create_task_endpoint(
     body: CreateTaskRequest,
     conn: sqlite3.Connection = Depends(get_db),
 ) -> dict[str, Any]:
-    """Create a task within a project."""
+    """Create a task within a project at a workflow step."""
     result = create_task(
         conn,
         title=body.title,
         description=body.description,
-        phase=body.phase,
+        step_id=body.step_id,
         project_id=project_id,
         parent_task_id=body.parent_task_id,
     )
@@ -161,14 +252,13 @@ def create_task_endpoint(
 def list_project_tasks(
     project_id: str,
     conn: sqlite3.Connection = Depends(get_db),
-) -> dict[str, list[dict[str, Any]]]:
-    """List all tasks for a project grouped by status."""
-    # Verify project exists
+) -> dict[str, Any]:
+    """List all tasks for a project grouped by workflow step."""
     row = conn.execute("SELECT id FROM projects WHERE id = ?", (project_id,)).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
 
-    return get_tasks_grouped_by_status(conn, project_id)
+    return get_tasks_grouped_by_step(conn, project_id)
 
 
 @router.get("/tasks/{task_id}", response_model=TaskDetailResponse)
@@ -188,15 +278,22 @@ def update_task_endpoint(
     body: UpdateTaskRequest,
     conn: sqlite3.Connection = Depends(get_db),
 ) -> dict[str, Any]:
-    """Update a task's status, title, or description."""
-    # Handle status update via state machine
-    if body.status is not None:
-        result = update_task_status(conn, task_id, body.status)
+    """Update a task's step, cancelled state, title, or description."""
+    # Handle step movement
+    if body.step_id is not None:
+        result = move_task(conn, task_id, body.step_id)
+        _check_error(result)
+
+    # Handle cancel/uncancel
+    if body.cancelled is not None:
+        if body.cancelled:
+            result = cancel_task(conn, task_id)
+        else:
+            result = uncancel_task(conn, task_id)
         _check_error(result)
 
     # Handle title/description updates via direct SQL
     if body.title is not None or body.description is not None:
-        # First verify task exists
         task = conn.execute("SELECT id FROM tasks WHERE id = ?", (task_id,)).fetchone()
         if task is None:
             raise HTTPException(status_code=404, detail=f"Task '{task_id}' not found")
@@ -219,7 +316,7 @@ def update_task_endpoint(
             f"UPDATE tasks SET {', '.join(updates)} WHERE id = ?",  # noqa: S608
             params,
         )
-        emit_event(conn, "task_updated", {"task_id": task_id})
+        emit_event(conn, "task_created", {"task_id": task_id})
         conn.commit()
 
     # Return the full updated task
@@ -259,7 +356,6 @@ def list_task_runs(
     conn: sqlite3.Connection = Depends(get_db),
 ) -> list[dict[str, Any]]:
     """Get agent run history for a task."""
-    # Verify task exists
     task = conn.execute("SELECT id FROM tasks WHERE id = ?", (task_id,)).fetchone()
     if task is None:
         raise HTTPException(status_code=404, detail=f"Task '{task_id}' not found")

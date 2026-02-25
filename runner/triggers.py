@@ -33,16 +33,77 @@ def count_active_runs(conn: sqlite3.Connection) -> int:
     return row["cnt"]
 
 
-def should_dispatch(event: dict[str, Any]) -> bool:
+def _step_has_agent(conn: sqlite3.Connection, step_id: str) -> bool:
+    """Check if a workflow step has a system_prompt (agent configured)."""
+    row = conn.execute(
+        "SELECT system_prompt IS NOT NULL as has_agent FROM workflow_steps WHERE id = ?",
+        (step_id,),
+    ).fetchone()
+    return bool(row and row["has_agent"])
+
+
+def _is_terminal_step(conn: sqlite3.Connection, step_id: str) -> bool:
+    """Check if a step is the last step with no system_prompt (terminal)."""
+    step = conn.execute(
+        "SELECT project_id, position, system_prompt FROM workflow_steps WHERE id = ?",
+        (step_id,),
+    ).fetchone()
+    if step is None:
+        return False
+
+    if step["system_prompt"] is not None:
+        return False
+
+    # Check if it's the last step
+    max_pos = conn.execute(
+        "SELECT MAX(position) as max_pos FROM workflow_steps WHERE project_id = ?",
+        (step["project_id"],),
+    ).fetchone()
+
+    return step["position"] == max_pos["max_pos"]
+
+
+def should_dispatch(
+    event: dict[str, Any], conn: sqlite3.Connection | None = None
+) -> bool:
     """Determine if an event should trigger an agent dispatch.
 
-    Returns True for task_updated events where new_status is 'in_progress'.
-    orchestrator_trigger events are consumed without dispatch (the orchestrator
-    task is already created in in_progress by complete_task, and its own
-    task_updated event handles the launch).
+    Returns True for:
+    - task_moved events where the new step has a system_prompt
+    - task_created events where the task's step has a system_prompt
     """
-    if event["type"] == "task_updated":
-        return event["payload"].get("new_status") == "in_progress"
+    if conn is None:
+        return False
+    if event["type"] == "task_moved":
+        new_step_id = event["payload"].get("new_step_id")
+        if new_step_id:
+            return _step_has_agent(conn, new_step_id)
+    if event["type"] == "task_created":
+        task_id = event["payload"].get("task_id")
+        if task_id:
+            row = conn.execute(
+                "SELECT step_id FROM tasks WHERE id = ?", (task_id,)
+            ).fetchone()
+            if row:
+                return _step_has_agent(conn, row["step_id"])
+    return False
+
+
+def should_cleanup(
+    event: dict[str, Any], conn: sqlite3.Connection | None = None
+) -> bool:
+    """Determine if an event should trigger worktree cleanup.
+
+    Returns True for:
+    - task_moved events where the new step is terminal (last position, no agent)
+    - task_cancelled events
+    """
+    if event["type"] == "task_cancelled":
+        return True
+    if event["type"] == "task_moved" and conn is not None:
+        new_step_id = event["payload"].get("new_step_id")
+        if new_step_id:
+            return _is_terminal_step(conn, new_step_id)
     return False
 
 
@@ -82,8 +143,9 @@ async def process_triggers(db_path: str, config: dict[str, Any]) -> None:
     """Background task that polls events and dispatches agent runs.
 
     Dispatch rules:
-    - task moves to in_progress: launch agent matching task phase
-    - task moves to done: clean up worktree
+    - task_moved to step with system_prompt: launch agent
+    - task_moved to terminal step: clean up worktree
+    - task_cancelled: clean up worktree
 
     Concurrency guards:
     - Skip if task already has an active run (no double-launch)
@@ -97,15 +159,14 @@ async def process_triggers(db_path: str, config: dict[str, Any]) -> None:
             try:
                 events = get_unconsumed_trigger_events(conn)
                 for event in events:
-                    if event["type"] == "task_updated":
-                        task_id = event["payload"].get("task_id")
-                        new_status = event["payload"].get("new_status")
+                    task_id = event["payload"].get("task_id")
 
+                    if event["type"] in ("task_moved", "task_created"):
                         if not task_id:
                             mark_trigger_consumed(conn, event["id"])
                             continue
 
-                        if new_status == "in_progress":
+                        if should_dispatch(event, conn):
                             # Check concurrency guards
                             if has_active_run(conn, task_id):
                                 mark_trigger_consumed(conn, event["id"])
@@ -117,7 +178,7 @@ async def process_triggers(db_path: str, config: dict[str, Any]) -> None:
                             mark_trigger_consumed(conn, event["id"])
                             asyncio.create_task(_launch_in_thread(task_id, config))
 
-                        elif new_status == "done":
+                        elif should_cleanup(event, conn):
                             task = conn.execute(
                                 "SELECT worktree_path FROM tasks WHERE id = ?",
                                 (task_id,),
@@ -133,9 +194,22 @@ async def process_triggers(db_path: str, config: dict[str, Any]) -> None:
                         else:
                             mark_trigger_consumed(conn, event["id"])
 
-                    elif event["type"] == "orchestrator_trigger":
-                        # Orchestrator task already created by complete_task
-                        # Its task_updated event handles the launch
+                    elif event["type"] == "task_cancelled":
+                        if task_id:
+                            task = conn.execute(
+                                "SELECT worktree_path FROM tasks WHERE id = ?",
+                                (task_id,),
+                            ).fetchone()
+                            if task and task["worktree_path"]:
+                                repo_path = config.get("repo_path", "")
+                                asyncio.create_task(
+                                    _cleanup_worktree_in_thread(
+                                        task_id, task["worktree_path"], repo_path
+                                    )
+                                )
+                        mark_trigger_consumed(conn, event["id"])
+
+                    else:
                         mark_trigger_consumed(conn, event["id"])
 
             finally:

@@ -16,6 +16,20 @@ TABLES = {
             updated_at  TEXT NOT NULL
         )
     """,
+    "workflow_steps": """
+        CREATE TABLE IF NOT EXISTS workflow_steps (
+            id            TEXT PRIMARY KEY,
+            project_id    TEXT NOT NULL REFERENCES projects(id),
+            name          TEXT NOT NULL,
+            position      INTEGER NOT NULL,
+            system_prompt TEXT,
+            model         TEXT,
+            color         TEXT,
+            created_at    TEXT NOT NULL,
+            UNIQUE(project_id, position),
+            UNIQUE(project_id, name)
+        )
+    """,
     "tasks": """
         CREATE TABLE IF NOT EXISTS tasks (
             id              TEXT PRIMARY KEY,
@@ -23,8 +37,8 @@ TABLES = {
             parent_task_id  TEXT REFERENCES tasks(id),
             title           TEXT NOT NULL,
             description     TEXT,
-            phase           TEXT NOT NULL,
-            status          TEXT NOT NULL DEFAULT 'backlog',
+            step_id         TEXT NOT NULL REFERENCES workflow_steps(id),
+            cancelled       INTEGER NOT NULL DEFAULT 0,
             worktree_path   TEXT,
             branch          TEXT,
             session_id      TEXT,
@@ -45,7 +59,7 @@ TABLES = {
         CREATE TABLE IF NOT EXISTS agent_runs (
             id           TEXT PRIMARY KEY,
             task_id      TEXT NOT NULL REFERENCES tasks(id),
-            phase        TEXT NOT NULL,
+            step_id      TEXT NOT NULL REFERENCES workflow_steps(id),
             started_at   TEXT NOT NULL,
             completed_at TEXT,
             exit_code    INTEGER,
@@ -74,6 +88,7 @@ TABLES = {
 # Ordered list for creation — respects foreign key dependencies
 TABLE_CREATION_ORDER = [
     "projects",
+    "workflow_steps",
     "tasks",
     "comments",
     "agent_runs",

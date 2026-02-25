@@ -1,4 +1,4 @@
-import type { Project, ProjectDetail } from "../types";
+import type { Project, ProjectDetail, WorkflowStep } from "../types";
 import { apiFetch } from "./client";
 
 export function listProjects(): Promise<Project[]> {
@@ -18,4 +18,8 @@ export function createProject(title: string, description: string): Promise<{ pro
 
 export function deleteProject(id: string): Promise<void> {
   return apiFetch(`/projects/${id}`, { method: "DELETE" });
+}
+
+export function listProjectSteps(projectId: string): Promise<WorkflowStep[]> {
+  return apiFetch(`/projects/${projectId}/steps`);
 }

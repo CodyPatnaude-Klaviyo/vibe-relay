@@ -12,15 +12,14 @@ class ConfigError(Exception):
     """Raised when configuration is invalid or missing required fields."""
 
 
-REQUIRED_FIELDS = ["repo_path", "base_branch", "worktrees_path", "db_path", "agents"]
-
-REQUIRED_AGENT_ROLES = ["planner", "coder", "reviewer", "orchestrator"]
+REQUIRED_FIELDS = ["repo_path", "base_branch", "worktrees_path", "db_path"]
 
 PATH_FIELDS = ["repo_path", "worktrees_path", "db_path"]
 
 DEFAULTS: dict[str, Any] = {
     "max_parallel_agents": 3,
     "port_range": [4000, 4099],
+    "default_model": "claude-sonnet-4-5",
 }
 
 
@@ -64,23 +63,6 @@ def _validate(config: dict[str, Any]) -> None:
             raise ConfigError(
                 f"Missing required config field: '{field}'. "
                 f"See vibe-relay.config.json.example for the expected format."
-            )
-
-    if not isinstance(config["agents"], dict):
-        raise ConfigError("'agents' must be a dict mapping role names to agent configs.")
-
-    for role in REQUIRED_AGENT_ROLES:
-        if role not in config["agents"]:
-            raise ConfigError(
-                f"Missing required agent role: '{role}'. "
-                f"Required roles: {REQUIRED_AGENT_ROLES}"
-            )
-        agent_cfg = config["agents"][role]
-        if "model" not in agent_cfg:
-            raise ConfigError(f"Agent '{role}' missing required field 'model'.")
-        if "system_prompt_file" not in agent_cfg:
-            raise ConfigError(
-                f"Agent '{role}' missing required field 'system_prompt_file'."
             )
 
 

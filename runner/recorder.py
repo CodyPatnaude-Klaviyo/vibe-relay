@@ -17,13 +17,13 @@ def _uuid() -> str:
     return str(uuid.uuid4())
 
 
-def start_run(conn: sqlite3.Connection, task_id: str, phase: str) -> str:
+def start_run(conn: sqlite3.Connection, task_id: str, step_id: str) -> str:
     """Record the start of an agent run.
 
     Args:
         conn: Active SQLite connection.
         task_id: The task being worked on.
-        phase: The agent phase (planner, coder, reviewer, orchestrator).
+        step_id: The workflow step ID for this run.
 
     Returns:
         The generated run_id (UUID4).
@@ -31,8 +31,8 @@ def start_run(conn: sqlite3.Connection, task_id: str, phase: str) -> str:
     run_id = _uuid()
     now = _now()
     conn.execute(
-        "INSERT INTO agent_runs (id, task_id, phase, started_at) VALUES (?, ?, ?, ?)",
-        (run_id, task_id, phase, now),
+        "INSERT INTO agent_runs (id, task_id, step_id, started_at) VALUES (?, ?, ?, ?)",
+        (run_id, task_id, step_id, now),
     )
     conn.commit()
     return run_id

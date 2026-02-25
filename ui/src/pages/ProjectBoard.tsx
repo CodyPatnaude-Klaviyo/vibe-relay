@@ -21,7 +21,7 @@ export function ProjectBoard() {
     enabled: !!id,
   });
 
-  const { data: tasks, isLoading: tasksLoading } = useBoard(id!);
+  const { data: boardData, isLoading: tasksLoading } = useBoard(id!);
 
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
@@ -70,7 +70,7 @@ export function ProjectBoard() {
 
       {/* Board area */}
       <div style={{ flex: 1, overflow: "hidden" }}>
-        {tasksLoading || !tasks ? (
+        {tasksLoading || !boardData ? (
           <div
             style={{
               display: "flex",
@@ -83,7 +83,7 @@ export function ProjectBoard() {
             Loading tasks...
           </div>
         ) : (
-          <Board tasks={tasks} />
+          <Board data={boardData} projectId={id!} />
         )}
       </div>
 

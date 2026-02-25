@@ -1,7 +1,7 @@
 """Event emission for the MCP server.
 
-Every write operation inserts an event row so the API server (Phase 4)
-can broadcast it via websocket.
+Every write operation inserts an event row so the API server
+can broadcast it via websocket and the trigger processor can dispatch agents.
 """
 
 import json
@@ -23,8 +23,9 @@ def emit_event(
 
     Args:
         conn: Active SQLite connection.
-        event_type: One of 'task_created', 'task_updated', 'comment_added',
-                    'subtasks_created', 'orchestrator_trigger'.
+        event_type: One of 'task_created', 'task_moved', 'task_cancelled',
+                    'task_uncancelled', 'comment_added', 'subtasks_created',
+                    'project_created'.
         payload: JSON-serializable dict with event details.
 
     Returns:

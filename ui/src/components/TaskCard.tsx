@@ -1,5 +1,5 @@
 import type { Task } from "../types";
-import { PhaseBadge } from "./PhaseBadge";
+import { StepBadge } from "./StepBadge";
 import { useBoardStore } from "../store/boardStore";
 
 export function TaskCard({ task }: { task: Task }) {
@@ -16,6 +16,8 @@ export function TaskCard({ task }: { task: Task }) {
         padding: "12px",
         cursor: "pointer",
         marginBottom: "8px",
+        opacity: task.cancelled ? 0.5 : 1,
+        textDecoration: task.cancelled ? "line-through" : "none",
       }}
       onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
       onMouseLeave={(e) => (e.currentTarget.style.background = "var(--bg-surface)")}
@@ -24,7 +26,7 @@ export function TaskCard({ task }: { task: Task }) {
         {task.title}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-        <PhaseBadge phase={task.phase} />
+        <StepBadge name={task.step_name} position={task.step_position} />
         {task.branch && (
           <span
             style={{

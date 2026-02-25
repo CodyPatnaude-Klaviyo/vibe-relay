@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.deps import set_db_path
-from api.routes import router
+from api.routes import router, set_config
 from api.ws import broadcast_events
 
 
@@ -43,6 +43,7 @@ def create_app(db_path: str, config: dict[str, Any] | None = None) -> FastAPI:
                 pass
 
     set_db_path(db_path)
+    set_config(config)
 
     app = FastAPI(title="vibe-relay", lifespan=lifespan)
 

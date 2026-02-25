@@ -4,8 +4,8 @@ Verifies:
 - DB creation and migrations
 - WAL mode enabled
 - Table creation with correct columns
-- Insert and read for projects and tasks
-- Foreign key constraint enforcement between tasks and projects
+- Insert and read for projects, workflow_steps, and tasks
+- Foreign key constraint enforcement
 - Idempotent migrations (running twice doesn't error)
 """
 
@@ -45,7 +45,15 @@ class TestMigrations:
             "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
         ).fetchall()
         table_names = sorted(t[0] for t in tables)
-        assert table_names == ["agent_runs", "comments", "events", "ports", "projects", "tasks"]
+        assert table_names == [
+            "agent_runs",
+            "comments",
+            "events",
+            "ports",
+            "projects",
+            "tasks",
+            "workflow_steps",
+        ]
 
     def test_wal_mode_enabled(self, conn: sqlite3.Connection) -> None:
         mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
@@ -58,12 +66,19 @@ class TestMigrations:
     def test_idempotent(self, conn: sqlite3.Connection) -> None:
         """Running migrations twice should not raise."""
         run_migrations(conn)
-        # Verify tables still exist
         tables = conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
         ).fetchall()
         table_names = sorted(t[0] for t in tables)
-        assert table_names == ["agent_runs", "comments", "events", "ports", "projects", "tasks"]
+        assert table_names == [
+            "agent_runs",
+            "comments",
+            "events",
+            "ports",
+            "projects",
+            "tasks",
+            "workflow_steps",
+        ]
 
 
 class TestProjectCRUD:
@@ -90,21 +105,88 @@ class TestProjectCRUD:
         assert row["updated_at"] == now
 
 
+class TestWorkflowStepsCRUD:
+    def test_insert_and_read_step(self, conn: sqlite3.Connection) -> None:
+        project_id = _uuid()
+        step_id = _uuid()
+        now = _now()
+
+        conn.execute(
+            "INSERT INTO projects (id, title, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+            (project_id, "Test", "active", now, now),
+        )
+        conn.execute(
+            "INSERT INTO workflow_steps (id, project_id, name, position, system_prompt, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (step_id, project_id, "Plan", 0, "You are a planner", now),
+        )
+        conn.commit()
+
+        row = conn.execute(
+            "SELECT * FROM workflow_steps WHERE id = ?", (step_id,)
+        ).fetchone()
+        assert row["name"] == "Plan"
+        assert row["position"] == 0
+        assert row["system_prompt"] == "You are a planner"
+
+    def test_unique_position_per_project(self, conn: sqlite3.Connection) -> None:
+        project_id = _uuid()
+        now = _now()
+        conn.execute(
+            "INSERT INTO projects (id, title, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+            (project_id, "Test", "active", now, now),
+        )
+        conn.execute(
+            "INSERT INTO workflow_steps (id, project_id, name, position, created_at) VALUES (?, ?, ?, ?, ?)",
+            (_uuid(), project_id, "Plan", 0, now),
+        )
+        conn.commit()
+
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO workflow_steps (id, project_id, name, position, created_at) VALUES (?, ?, ?, ?, ?)",
+                (_uuid(), project_id, "Also Plan", 0, now),
+            )
+
+    def test_unique_name_per_project(self, conn: sqlite3.Connection) -> None:
+        project_id = _uuid()
+        now = _now()
+        conn.execute(
+            "INSERT INTO projects (id, title, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+            (project_id, "Test", "active", now, now),
+        )
+        conn.execute(
+            "INSERT INTO workflow_steps (id, project_id, name, position, created_at) VALUES (?, ?, ?, ?, ?)",
+            (_uuid(), project_id, "Plan", 0, now),
+        )
+        conn.commit()
+
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO workflow_steps (id, project_id, name, position, created_at) VALUES (?, ?, ?, ?, ?)",
+                (_uuid(), project_id, "Plan", 1, now),
+            )
+
+
 class TestTaskCRUD:
     def test_insert_and_read_task(self, conn: sqlite3.Connection) -> None:
         project_id = _uuid()
+        step_id = _uuid()
         task_id = _uuid()
         now = _now()
 
         conn.execute(
-            "INSERT INTO projects (id, title, status, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO projects (id, title, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
             (project_id, "Test Project", "active", now, now),
         )
         conn.execute(
-            "INSERT INTO tasks (id, project_id, title, phase, status, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (task_id, project_id, "Test Task", "coder", "backlog", now, now),
+            "INSERT INTO workflow_steps (id, project_id, name, position, created_at) VALUES (?, ?, ?, ?, ?)",
+            (step_id, project_id, "Plan", 0, now),
+        )
+        conn.execute(
+            "INSERT INTO tasks (id, project_id, title, step_id, cancelled, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, 0, ?, ?)",
+            (task_id, project_id, "Test Task", step_id, now, now),
         )
         conn.commit()
 
@@ -113,8 +195,8 @@ class TestTaskCRUD:
         assert row["id"] == task_id
         assert row["project_id"] == project_id
         assert row["title"] == "Test Task"
-        assert row["phase"] == "coder"
-        assert row["status"] == "backlog"
+        assert row["step_id"] == step_id
+        assert row["cancelled"] == 0
 
     def test_foreign_key_constraint(self, conn: sqlite3.Connection) -> None:
         """Inserting a task with a nonexistent project_id should fail."""
@@ -124,9 +206,9 @@ class TestTaskCRUD:
 
         with pytest.raises(sqlite3.IntegrityError):
             conn.execute(
-                "INSERT INTO tasks (id, project_id, title, phase, status, created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (task_id, fake_project_id, "Orphan Task", "coder", "backlog", now, now),
+                "INSERT INTO tasks (id, project_id, title, step_id, cancelled, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, 0, ?, ?)",
+                (task_id, fake_project_id, "Orphan Task", _uuid(), now, now),
             )
 
 
@@ -141,8 +223,8 @@ class TestTaskColumns:
             "parent_task_id",
             "title",
             "description",
-            "phase",
-            "status",
+            "step_id",
+            "cancelled",
             "worktree_path",
             "branch",
             "session_id",
@@ -169,11 +251,26 @@ class TestTaskColumns:
         expected = [
             "id",
             "task_id",
-            "phase",
+            "step_id",
             "started_at",
             "completed_at",
             "exit_code",
             "error",
+        ]
+        assert column_names == expected
+
+    def test_workflow_steps_has_all_columns(self, conn: sqlite3.Connection) -> None:
+        columns = conn.execute("PRAGMA table_info(workflow_steps)").fetchall()
+        column_names = [c["name"] for c in columns]
+        expected = [
+            "id",
+            "project_id",
+            "name",
+            "position",
+            "system_prompt",
+            "model",
+            "color",
+            "created_at",
         ]
         assert column_names == expected
 
@@ -186,5 +283,12 @@ class TestTaskColumns:
     def test_events_has_all_columns(self, conn: sqlite3.Connection) -> None:
         columns = conn.execute("PRAGMA table_info(events)").fetchall()
         column_names = [c["name"] for c in columns]
-        expected = ["id", "type", "payload", "created_at", "consumed", "trigger_consumed"]
+        expected = [
+            "id",
+            "type",
+            "payload",
+            "created_at",
+            "consumed",
+            "trigger_consumed",
+        ]
         assert column_names == expected

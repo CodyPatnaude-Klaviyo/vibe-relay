@@ -1,6 +1,6 @@
 """MCP server for vibe-relay.
 
-Exposes 8 tools for board management via stdio transport.
+Exposes tools for board management via stdio transport.
 Launched by `vibe-relay mcp [--task-id <id>]`.
 """
 
@@ -13,6 +13,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
 
@@ -62,6 +63,22 @@ def create_server() -> FastMCP:
         result = tools.create_project(conn, title, description)
         return json.dumps(result, indent=2)
 
+    @server.tool(description="Create workflow steps for a project")
+    def create_workflow_steps(
+        project_id: str,
+        steps: list[dict[str, Any]],
+        ctx: Context = None,  # type: ignore[assignment]
+    ) -> str:
+        conn = _get_conn(ctx)
+        result = tools.create_workflow_steps(conn, project_id, steps)
+        return json.dumps(result, indent=2)
+
+    @server.tool(description="Return workflow steps for a project")
+    def get_workflow_steps(project_id: str, ctx: Context = None) -> str:  # type: ignore[assignment]
+        conn = _get_conn(ctx)
+        result = tools.get_workflow_steps(conn, project_id)
+        return json.dumps(result, indent=2)
+
     @server.tool(description="Return the full board state for a project")
     def get_board(project_id: str, ctx: Context) -> str:
         conn = _get_conn(ctx)
@@ -74,24 +91,26 @@ def create_server() -> FastMCP:
         result = tools.get_task(conn, task_id)
         return json.dumps(result, indent=2)
 
-    @server.tool(description="Return in_progress tasks for a given phase")
-    def get_my_tasks(phase: str, project_id: str | None = None, ctx: Context = None) -> str:  # type: ignore[assignment]
+    @server.tool(description="Return non-cancelled tasks at a given workflow step")
+    def get_my_tasks(
+        step_id: str, project_id: str | None = None, ctx: Context = None
+    ) -> str:  # type: ignore[assignment]
         conn = _get_conn(ctx)
-        result = tools.get_my_tasks(conn, phase, project_id)
+        result = tools.get_my_tasks(conn, step_id, project_id)
         return json.dumps(result, indent=2)
 
-    @server.tool(description="Create a new task")
+    @server.tool(description="Create a new task at a workflow step")
     def create_task(
         title: str,
         description: str,
-        phase: str,
+        step_id: str,
         project_id: str,
         parent_task_id: str | None = None,
         ctx: Context = None,  # type: ignore[assignment]
     ) -> str:
         conn = _get_conn(ctx)
         result = tools.create_task(
-            conn, title, description, phase, project_id, parent_task_id
+            conn, title, description, step_id, project_id, parent_task_id
         )
         return json.dumps(result, indent=2)
 
@@ -99,20 +118,35 @@ def create_server() -> FastMCP:
     def create_subtasks(
         parent_task_id: str,
         tasks: list[dict[str, str]],
+        default_step_id: str | None = None,
         ctx: Context = None,  # type: ignore[assignment]
     ) -> str:
         conn = _get_conn(ctx)
-        result = tools.create_subtasks(conn, parent_task_id, tasks)
+        result = tools.create_subtasks(conn, parent_task_id, tasks, default_step_id)
         return json.dumps(result, indent=2)
 
     @server.tool(
-        description="Move a task to a new status (enforces state machine)"
+        description="Move a task to a different workflow step (enforces step transitions)"
     )
-    def update_task_status(
-        task_id: str, status: str, ctx: Context = None  # type: ignore[assignment]
+    def move_task(
+        task_id: str,
+        target_step_id: str,
+        ctx: Context = None,  # type: ignore[assignment]
     ) -> str:
         conn = _get_conn(ctx)
-        result = tools.update_task_status(conn, task_id, status)
+        result = tools.move_task(conn, task_id, target_step_id)
+        return json.dumps(result, indent=2)
+
+    @server.tool(description="Cancel a task")
+    def cancel_task(task_id: str, ctx: Context = None) -> str:  # type: ignore[assignment]
+        conn = _get_conn(ctx)
+        result = tools.cancel_task(conn, task_id)
+        return json.dumps(result, indent=2)
+
+    @server.tool(description="Uncancel a previously cancelled task")
+    def uncancel_task(task_id: str, ctx: Context = None) -> str:  # type: ignore[assignment]
+        conn = _get_conn(ctx)
+        result = tools.uncancel_task(conn, task_id)
         return json.dumps(result, indent=2)
 
     @server.tool(description="Add a comment to a task's thread")
@@ -124,12 +158,6 @@ def create_server() -> FastMCP:
     ) -> str:
         conn = _get_conn(ctx)
         result = tools.add_comment(conn, task_id, content, author_role)
-        return json.dumps(result, indent=2)
-
-    @server.tool(description="Mark a task done and check sibling completion")
-    def complete_task(task_id: str, ctx: Context = None) -> str:  # type: ignore[assignment]
-        conn = _get_conn(ctx)
-        result = tools.complete_task(conn, task_id)
         return json.dumps(result, indent=2)
 
     return server

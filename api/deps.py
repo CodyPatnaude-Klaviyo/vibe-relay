@@ -6,7 +6,6 @@ from collections.abc import Generator
 from typing import Any
 
 from db.client import get_connection
-from db.state_machine import VALID_STATUSES
 
 
 # Module-level DB path — set by app startup
@@ -51,11 +50,11 @@ def mark_event_consumed(conn: sqlite3.Connection, event_id: str) -> None:
 
 
 def get_unconsumed_trigger_events(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    """Fetch unconsumed trigger events (task state changes and orchestrator triggers)."""
+    """Fetch unconsumed trigger events (task creation, movements, and cancellations)."""
     rows = conn.execute(
         """SELECT id, type, payload, created_at FROM events
            WHERE trigger_consumed = 0
-             AND type IN ('task_updated', 'orchestrator_trigger')
+             AND type IN ('task_created', 'task_moved', 'task_cancelled')
            ORDER BY created_at"""
     ).fetchall()
     return [
@@ -75,32 +74,79 @@ def mark_trigger_consumed(conn: sqlite3.Connection, event_id: str) -> None:
     conn.commit()
 
 
-def get_task_counts_by_status(
+def get_task_counts_by_step(
     conn: sqlite3.Connection, project_id: str
 ) -> dict[str, int]:
-    """Return task count per status for a project."""
-    counts: dict[str, int] = {s: 0 for s in VALID_STATUSES}
-    rows = conn.execute(
-        "SELECT status, COUNT(*) as cnt FROM tasks WHERE project_id = ? GROUP BY status",
+    """Return task count per workflow step for a project (excluding cancelled)."""
+    steps = conn.execute(
+        "SELECT id, name FROM workflow_steps WHERE project_id = ? ORDER BY position",
         (project_id,),
     ).fetchall()
+
+    counts: dict[str, int] = {s["name"]: 0 for s in steps}
+    counts["cancelled"] = 0
+
+    rows = conn.execute(
+        """SELECT ws.name as step_name, t.cancelled, COUNT(*) as cnt
+           FROM tasks t
+           JOIN workflow_steps ws ON t.step_id = ws.id
+           WHERE t.project_id = ?
+           GROUP BY ws.name, t.cancelled""",
+        (project_id,),
+    ).fetchall()
+
     for row in rows:
-        counts[row["status"]] = row["cnt"]
+        if row["cancelled"]:
+            counts["cancelled"] += row["cnt"]
+        else:
+            counts[row["step_name"]] = row["cnt"]
+
     return counts
 
 
-def get_tasks_grouped_by_status(
+def get_tasks_grouped_by_step(
     conn: sqlite3.Connection, project_id: str
-) -> dict[str, list[dict[str, Any]]]:
-    """Return all tasks for a project grouped by status column."""
-    result: dict[str, list[dict[str, Any]]] = {s: [] for s in VALID_STATUSES}
-    rows = conn.execute(
-        "SELECT * FROM tasks WHERE project_id = ? ORDER BY created_at",
+) -> dict[str, Any]:
+    """Return all tasks for a project grouped by workflow step."""
+    steps = conn.execute(
+        """SELECT id, name, position,
+                  system_prompt IS NOT NULL as has_agent,
+                  model, color
+           FROM workflow_steps
+           WHERE project_id = ?
+           ORDER BY position""",
         (project_id,),
     ).fetchall()
+
+    tasks_by_step: dict[str, list[dict[str, Any]]] = {s["id"]: [] for s in steps}
+    cancelled: list[dict[str, Any]] = []
+
+    rows = conn.execute(
+        """SELECT t.*,
+                  ws.name as step_name,
+                  ws.position as step_position
+           FROM tasks t
+           JOIN workflow_steps ws ON t.step_id = ws.id
+           WHERE t.project_id = ?
+           ORDER BY t.created_at""",
+        (project_id,),
+    ).fetchall()
+
     for row in rows:
-        result[row["status"]].append(dict(row))
-    return result
+        task = dict(row)
+        task["cancelled"] = bool(task["cancelled"])
+        if task["cancelled"]:
+            cancelled.append(task)
+        else:
+            step_list = tasks_by_step.get(task["step_id"])
+            if step_list is not None:
+                step_list.append(task)
+
+    return {
+        "steps": [dict(s) for s in steps],
+        "tasks": tasks_by_step,
+        "cancelled": cancelled,
+    }
 
 
 def get_agent_runs(conn: sqlite3.Connection, task_id: str) -> list[dict[str, Any]]:
@@ -119,14 +165,27 @@ def enrich_event_payload(
     event_type = event["type"]
     payload = event["payload"]
 
-    if event_type in ("task_created", "task_updated"):
+    if event_type in (
+        "task_created",
+        "task_moved",
+        "task_cancelled",
+        "task_uncancelled",
+    ):
         task_id = payload.get("task_id")
         if task_id:
             task = conn.execute(
-                "SELECT * FROM tasks WHERE id = ?", (task_id,)
+                """SELECT t.*,
+                          ws.name as step_name,
+                          ws.position as step_position
+                   FROM tasks t
+                   JOIN workflow_steps ws ON t.step_id = ws.id
+                   WHERE t.id = ?""",
+                (task_id,),
             ).fetchone()
             if task:
-                return {"type": event_type, "payload": dict(task)}
+                task_dict = dict(task)
+                task_dict["cancelled"] = bool(task_dict["cancelled"])
+                return {"type": event_type, "payload": task_dict}
 
     elif event_type == "comment_added":
         comment_id = payload.get("comment_id")

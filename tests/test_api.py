@@ -1,7 +1,8 @@
 """Tests for the vibe-relay REST API endpoints.
 
-Covers project CRUD, task CRUD, comments, and agent run listing.
-Uses httpx.AsyncClient with ASGITransport for async FastAPI testing.
+Covers project CRUD, task CRUD (step-based), comments, workflow steps,
+and agent run listing. Uses httpx.AsyncClient with ASGITransport for
+async FastAPI testing.
 """
 
 from collections.abc import AsyncGenerator
@@ -49,16 +50,27 @@ async def _create_project(
     return resp.json()
 
 
+async def _get_steps(client: AsyncClient, project_id: str) -> list[dict]:
+    """Helper to get project steps."""
+    resp = await client.get(f"/projects/{project_id}/steps")
+    assert resp.status_code == 200
+    return resp.json()
+
+
 async def _create_task(
     client: AsyncClient,
     project_id: str,
     title: str = "Test Task",
-    phase: str = "coder",
+    step_id: str | None = None,
     description: str = "",
     parent_task_id: str | None = None,
 ) -> dict:
     """Helper to create a task and return the response body."""
-    body: dict = {"title": title, "phase": phase, "description": description}
+    if step_id is None:
+        steps = await _get_steps(client, project_id)
+        step_id = steps[0]["id"]
+
+    body: dict = {"title": title, "step_id": step_id, "description": description}
     if parent_task_id is not None:
         body["parent_task_id"] = parent_task_id
     resp = await client.post(f"/projects/{project_id}/tasks", json=body)
@@ -70,7 +82,7 @@ async def _create_task(
 
 
 class TestCreateProject:
-    """POST /projects creates a project and root planner task."""
+    """POST /projects creates a project with workflow steps and root task."""
 
     @pytest.mark.asyncio
     async def test_create_project_returns_201(self, client: AsyncClient) -> None:
@@ -100,12 +112,14 @@ class TestCreateProject:
         assert "updated_at" in project
 
     @pytest.mark.asyncio
-    async def test_root_task_is_planner_phase(self, client: AsyncClient) -> None:
+    async def test_root_task_at_first_step(self, client: AsyncClient) -> None:
         data = await _create_project(client, title="My Project")
         task = data["task"]
-        assert task["phase"] == "planner"
-        assert task["status"] == "in_progress"
         assert task["title"].startswith("Plan:")
+        # Should have step_id, step_name, cancelled
+        assert "step_id" in task
+        assert "step_name" in task
+        assert task["cancelled"] is False
 
     @pytest.mark.asyncio
     async def test_root_task_belongs_to_project(self, client: AsyncClient) -> None:
@@ -113,6 +127,16 @@ class TestCreateProject:
         project = data["project"]
         task = data["task"]
         assert task["project_id"] == project["id"]
+
+    @pytest.mark.asyncio
+    async def test_creates_workflow_steps(self, client: AsyncClient) -> None:
+        data = await _create_project(client)
+        project_id = data["project"]["id"]
+        steps = await _get_steps(client, project_id)
+        # Default workflow: Plan, Implement, Review, Done
+        assert len(steps) == 4
+        assert steps[0]["name"] == "Plan"
+        assert steps[3]["name"] == "Done"
 
     @pytest.mark.asyncio
     async def test_create_project_default_description(
@@ -166,7 +190,7 @@ class TestListProjects:
 
 
 class TestGetProject:
-    """GET /projects/{id} returns project with task counts."""
+    """GET /projects/{id} returns project with task counts by step."""
 
     @pytest.mark.asyncio
     async def test_get_project_with_task_counts(self, client: AsyncClient) -> None:
@@ -178,8 +202,8 @@ class TestGetProject:
         body = resp.json()
         assert body["id"] == project_id
         assert "tasks" in body
-        # Root planner task is auto-started to in_progress
-        assert body["tasks"]["in_progress"] == 1
+        # Should have step names as keys + cancelled
+        assert "cancelled" in body["tasks"]
 
     @pytest.mark.asyncio
     async def test_get_project_404(self, client: AsyncClient) -> None:
@@ -187,15 +211,19 @@ class TestGetProject:
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_task_counts_all_statuses_present(self, client: AsyncClient) -> None:
+    async def test_task_counts_include_step_names(self, client: AsyncClient) -> None:
         data = await _create_project(client)
         project_id = data["project"]["id"]
 
         resp = await client.get(f"/projects/{project_id}")
         body = resp.json()
         tasks = body["tasks"]
-        expected_statuses = {"backlog", "in_progress", "in_review", "done", "cancelled"}
-        assert set(tasks.keys()) == expected_statuses
+        # Should have step names from workflow
+        assert "Plan" in tasks
+        assert "Implement" in tasks
+        assert "Review" in tasks
+        assert "Done" in tasks
+        assert "cancelled" in tasks
 
 
 # ── TestDeleteProject ─────────────────────────────────────
@@ -230,20 +258,43 @@ class TestDeleteProject:
         assert resp.status_code == 404
 
 
+# ── TestListProjectSteps ──────────────────────────────────
+
+
+class TestListProjectSteps:
+    """GET /projects/{id}/steps returns ordered workflow steps."""
+
+    @pytest.mark.asyncio
+    async def test_returns_steps(self, client: AsyncClient) -> None:
+        data = await _create_project(client)
+        project_id = data["project"]["id"]
+
+        steps = await _get_steps(client, project_id)
+        assert len(steps) == 4
+        assert steps[0]["position"] == 0
+        assert steps[3]["position"] == 3
+
+    @pytest.mark.asyncio
+    async def test_nonexistent_project_404(self, client: AsyncClient) -> None:
+        resp = await client.get("/projects/nonexistent-id/steps")
+        assert resp.status_code == 404
+
+
 # ── TestCreateTask ────────────────────────────────────────
 
 
 class TestCreateTask:
-    """POST /projects/{id}/tasks creates a task."""
+    """POST /projects/{id}/tasks creates a task at a workflow step."""
 
     @pytest.mark.asyncio
     async def test_create_task_returns_201(self, client: AsyncClient) -> None:
         data = await _create_project(client)
         project_id = data["project"]["id"]
+        steps = await _get_steps(client, project_id)
 
         resp = await client.post(
             f"/projects/{project_id}/tasks",
-            json={"title": "Write code", "phase": "coder"},
+            json={"title": "Write code", "step_id": steps[1]["id"]},
         )
         assert resp.status_code == 201
 
@@ -251,11 +302,15 @@ class TestCreateTask:
     async def test_created_task_has_expected_fields(self, client: AsyncClient) -> None:
         data = await _create_project(client)
         project_id = data["project"]["id"]
+        steps = await _get_steps(client, project_id)
 
-        task = await _create_task(client, project_id, title="Write code", phase="coder")
+        task = await _create_task(
+            client, project_id, title="Write code", step_id=steps[1]["id"]
+        )
         assert task["title"] == "Write code"
-        assert task["phase"] == "coder"
-        assert task["status"] == "backlog"
+        assert task["step_id"] == steps[1]["id"]
+        assert task["step_name"] == "Implement"
+        assert task["cancelled"] is False
         assert task["project_id"] == project_id
         assert task["parent_task_id"] is None
 
@@ -264,26 +319,27 @@ class TestCreateTask:
         data = await _create_project(client)
         project_id = data["project"]["id"]
         root_task_id = data["task"]["id"]
+        steps = await _get_steps(client, project_id)
 
         child = await _create_task(
             client,
             project_id,
             title="Child",
-            phase="coder",
+            step_id=steps[1]["id"],
             parent_task_id=root_task_id,
         )
         assert child["parent_task_id"] == root_task_id
 
     @pytest.mark.asyncio
-    async def test_create_task_invalid_phase_422(self, client: AsyncClient) -> None:
+    async def test_create_task_nonexistent_step_404(self, client: AsyncClient) -> None:
         data = await _create_project(client)
         project_id = data["project"]["id"]
 
         resp = await client.post(
             f"/projects/{project_id}/tasks",
-            json={"title": "Bad", "phase": "invalid_phase"},
+            json={"title": "Bad", "step_id": "nonexistent-step"},
         )
-        assert resp.status_code == 422
+        assert resp.status_code == 404
 
     @pytest.mark.asyncio
     async def test_create_task_nonexistent_project_404(
@@ -291,7 +347,7 @@ class TestCreateTask:
     ) -> None:
         resp = await client.post(
             "/projects/nonexistent-id/tasks",
-            json={"title": "Orphan", "phase": "coder"},
+            json={"title": "Orphan", "step_id": "some-step"},
         )
         assert resp.status_code == 404
 
@@ -300,10 +356,10 @@ class TestCreateTask:
 
 
 class TestListTasks:
-    """GET /projects/{id}/tasks returns tasks grouped by status."""
+    """GET /projects/{id}/tasks returns tasks grouped by step."""
 
     @pytest.mark.asyncio
-    async def test_list_tasks_grouped_by_status(self, client: AsyncClient) -> None:
+    async def test_list_tasks_grouped_by_step(self, client: AsyncClient) -> None:
         data = await _create_project(client)
         project_id = data["project"]["id"]
 
@@ -311,20 +367,22 @@ class TestListTasks:
         assert resp.status_code == 200
         body = resp.json()
 
-        expected_statuses = {"backlog", "in_progress", "in_review", "done", "cancelled"}
-        assert set(body.keys()) == expected_statuses
+        assert "steps" in body
+        assert "tasks" in body
+        assert "cancelled" in body
 
     @pytest.mark.asyncio
-    async def test_root_task_in_in_progress(self, client: AsyncClient) -> None:
+    async def test_root_task_in_correct_step(self, client: AsyncClient) -> None:
         data = await _create_project(client)
         project_id = data["project"]["id"]
         root_task_id = data["task"]["id"]
+        root_step_id = data["task"]["step_id"]
 
         resp = await client.get(f"/projects/{project_id}/tasks")
         body = resp.json()
 
-        in_progress_ids = [t["id"] for t in body["in_progress"]]
-        assert root_task_id in in_progress_ids
+        task_ids = [t["id"] for t in body["tasks"].get(root_step_id, [])]
+        assert root_task_id in task_ids
 
     @pytest.mark.asyncio
     async def test_list_tasks_nonexistent_project_404(
@@ -337,15 +395,16 @@ class TestListTasks:
     async def test_list_tasks_multiple_tasks(self, client: AsyncClient) -> None:
         data = await _create_project(client)
         project_id = data["project"]["id"]
+        steps = await _get_steps(client, project_id)
 
-        await _create_task(client, project_id, title="Task A", phase="coder")
-        await _create_task(client, project_id, title="Task B", phase="reviewer")
+        await _create_task(client, project_id, title="Task A", step_id=steps[1]["id"])
+        await _create_task(client, project_id, title="Task B", step_id=steps[2]["id"])
 
         resp = await client.get(f"/projects/{project_id}/tasks")
         body = resp.json()
-        # Root planner task is in_progress, 2 new tasks in backlog
-        assert len(body["backlog"]) == 2
-        assert len(body["in_progress"]) == 1
+        # Count total tasks across all steps
+        total = sum(len(tasks) for tasks in body["tasks"].values())
+        assert total == 3  # root + 2 new
 
 
 # ── TestGetTask ───────────────────────────────────────────
@@ -400,8 +459,10 @@ class TestGetTask:
             "parent_task_id",
             "title",
             "description",
-            "phase",
-            "status",
+            "step_id",
+            "step_name",
+            "step_position",
+            "cancelled",
             "branch",
             "worktree_path",
             "session_id",
@@ -416,26 +477,49 @@ class TestGetTask:
 
 
 class TestUpdateTask:
-    """PATCH /tasks/{id} updates status, title, or description."""
+    """PATCH /tasks/{id} updates step, cancelled, title, or description."""
 
     @pytest.mark.asyncio
-    async def test_valid_status_transition(self, client: AsyncClient) -> None:
+    async def test_move_task_to_next_step(self, client: AsyncClient) -> None:
         data = await _create_project(client)
         task_id = data["task"]["id"]
+        project_id = data["project"]["id"]
+        steps = await _get_steps(client, project_id)
 
-        # Root task is auto-started to in_progress; in_progress -> in_review is valid
-        resp = await client.patch(f"/tasks/{task_id}", json={"status": "in_review"})
+        # Root task at first step, move to second
+        resp = await client.patch(f"/tasks/{task_id}", json={"step_id": steps[1]["id"]})
         assert resp.status_code == 200
-        assert resp.json()["status"] == "in_review"
+        assert resp.json()["step_id"] == steps[1]["id"]
 
     @pytest.mark.asyncio
-    async def test_invalid_status_transition_422(self, client: AsyncClient) -> None:
+    async def test_skip_step_422(self, client: AsyncClient) -> None:
+        data = await _create_project(client)
+        task_id = data["task"]["id"]
+        project_id = data["project"]["id"]
+        steps = await _get_steps(client, project_id)
+
+        # Try to skip from first to third step
+        resp = await client.patch(f"/tasks/{task_id}", json={"step_id": steps[2]["id"]})
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_cancel_task(self, client: AsyncClient) -> None:
         data = await _create_project(client)
         task_id = data["task"]["id"]
 
-        # in_progress -> done is invalid (must go through in_review first)
-        resp = await client.patch(f"/tasks/{task_id}", json={"status": "done"})
-        assert resp.status_code == 422
+        resp = await client.patch(f"/tasks/{task_id}", json={"cancelled": True})
+        assert resp.status_code == 200
+        assert resp.json()["cancelled"] is True
+
+    @pytest.mark.asyncio
+    async def test_uncancel_task(self, client: AsyncClient) -> None:
+        data = await _create_project(client)
+        task_id = data["task"]["id"]
+
+        await client.patch(f"/tasks/{task_id}", json={"cancelled": True})
+        resp = await client.patch(f"/tasks/{task_id}", json={"cancelled": False})
+        assert resp.status_code == 200
+        assert resp.json()["cancelled"] is False
 
     @pytest.mark.asyncio
     async def test_update_title(self, client: AsyncClient) -> None:
@@ -458,18 +542,19 @@ class TestUpdateTask:
         assert resp.json()["description"] == "Updated desc"
 
     @pytest.mark.asyncio
-    async def test_update_status_and_title(self, client: AsyncClient) -> None:
+    async def test_move_and_update_title(self, client: AsyncClient) -> None:
         data = await _create_project(client)
         task_id = data["task"]["id"]
+        project_id = data["project"]["id"]
+        steps = await _get_steps(client, project_id)
 
-        # Root task is auto-started to in_progress; move to in_review with title update
         resp = await client.patch(
             f"/tasks/{task_id}",
-            json={"status": "in_review", "title": "Active Task"},
+            json={"step_id": steps[1]["id"], "title": "Active Task"},
         )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["status"] == "in_review"
+        assert body["step_id"] == steps[1]["id"]
         assert body["title"] == "Active Task"
 
     @pytest.mark.asyncio
@@ -478,16 +563,17 @@ class TestUpdateTask:
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_chain_valid_transitions(self, client: AsyncClient) -> None:
-        """Test a full lifecycle: in_progress -> in_review -> done."""
+    async def test_full_lifecycle(self, client: AsyncClient) -> None:
+        """Test a full lifecycle: step 0 -> 1 -> 2 -> 3."""
         data = await _create_project(client)
         task_id = data["task"]["id"]
+        project_id = data["project"]["id"]
+        steps = await _get_steps(client, project_id)
 
-        # Root task is auto-started to in_progress
-        for status in ["in_review", "done"]:
-            resp = await client.patch(f"/tasks/{task_id}", json={"status": status})
+        for step in steps[1:]:
+            resp = await client.patch(f"/tasks/{task_id}", json={"step_id": step["id"]})
             assert resp.status_code == 200
-            assert resp.json()["status"] == status
+            assert resp.json()["step_id"] == step["id"]
 
 
 # ── TestAddComment ────────────────────────────────────────
@@ -503,7 +589,7 @@ class TestAddComment:
 
         resp = await client.post(
             f"/tasks/{task_id}/comments",
-            json={"content": "Looks good", "author_role": "reviewer"},
+            json={"content": "Looks good", "author_role": "Review"},
         )
         assert resp.status_code == 201
 
@@ -524,13 +610,13 @@ class TestAddComment:
         assert "created_at" in body
 
     @pytest.mark.asyncio
-    async def test_invalid_author_role_422(self, client: AsyncClient) -> None:
+    async def test_empty_author_role_422(self, client: AsyncClient) -> None:
         data = await _create_project(client)
         task_id = data["task"]["id"]
 
         resp = await client.post(
             f"/tasks/{task_id}/comments",
-            json={"content": "Bad role", "author_role": "alien"},
+            json={"content": "Bad role", "author_role": ""},
         )
         assert resp.status_code == 422
 
@@ -543,11 +629,11 @@ class TestAddComment:
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_all_valid_author_roles(self, client: AsyncClient) -> None:
+    async def test_any_author_role_accepted(self, client: AsyncClient) -> None:
         data = await _create_project(client)
         task_id = data["task"]["id"]
 
-        for role in ["planner", "coder", "reviewer", "orchestrator", "human"]:
+        for role in ["Plan", "Implement", "Review", "human", "custom_step"]:
             resp = await client.post(
                 f"/tasks/{task_id}/comments",
                 json={"content": f"Comment by {role}", "author_role": role},

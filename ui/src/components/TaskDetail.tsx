@@ -1,18 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { addComment, getTask, getTaskRuns, updateTask } from "../api/tasks";
+import { listProjectSteps } from "../api/projects";
 import { useBoardStore } from "../store/boardStore";
-import { TRANSITIONS } from "../types";
-import type { TaskStatus } from "../types";
+import type { WorkflowStep } from "../types";
 import { CommentThread } from "./CommentThread";
-import { PhaseBadge } from "./PhaseBadge";
-import { StatusBadge } from "./StatusBadge";
-
-const TRANSITION_LABELS: Record<string, string> = {
-  "backlog->in_progress": "Start",
-  "in_progress->in_review": "Send to Review",
-  "in_review->in_progress": "Request Changes",
-  "in_review->done": "Approve",
-};
+import { StepBadge } from "./StepBadge";
 
 function formatDuration(started: string, completed: string | null): string {
   if (!completed) return "running...";
@@ -34,6 +26,16 @@ function formatTimestamp(iso: string): string {
   });
 }
 
+function getValidTargetSteps(steps: WorkflowStep[], currentPosition: number): WorkflowStep[] {
+  return steps.filter((s) => {
+    // Next step (forward by 1)
+    if (s.position === currentPosition + 1) return true;
+    // Any previous step (backward)
+    if (s.position < currentPosition) return true;
+    return false;
+  });
+}
+
 export function TaskDetail({ taskId }: { taskId: string }) {
   const selectTask = useBoardStore((s) => s.selectTask);
   const eventVersion = useBoardStore((s) => s.eventVersion);
@@ -49,8 +51,22 @@ export function TaskDetail({ taskId }: { taskId: string }) {
     queryFn: () => getTaskRuns(taskId),
   });
 
-  const statusMutation = useMutation({
-    mutationFn: (newStatus: string) => updateTask(taskId, { status: newStatus }),
+  const { data: steps } = useQuery({
+    queryKey: ["steps", task?.project_id, eventVersion],
+    queryFn: () => listProjectSteps(task!.project_id),
+    enabled: !!task?.project_id,
+  });
+
+  const moveMutation = useMutation({
+    mutationFn: (targetStepId: string) => updateTask(taskId, { step_id: targetStepId }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["task", taskId] });
+      void queryClient.invalidateQueries({ queryKey: ["board"] });
+    },
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: (cancelled: boolean) => updateTask(taskId, { cancelled }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["task", taskId] });
       void queryClient.invalidateQueries({ queryKey: ["board"] });
@@ -88,10 +104,8 @@ export function TaskDetail({ taskId }: { taskId: string }) {
     );
   }
 
-  const currentStatus = task.status as TaskStatus;
-  const availableTransitions = (TRANSITIONS[currentStatus] ?? []).filter(
-    (s) => s !== "cancelled"
-  );
+  const validTargets = steps ? getValidTargetSteps(steps, task.step_position) : [];
+  const isMutating = moveMutation.isPending || cancelMutation.isPending;
 
   return (
     <div
@@ -134,10 +148,24 @@ export function TaskDetail({ taskId }: { taskId: string }) {
           {task.title}
         </h2>
 
-        {/* Badges */}
+        {/* Badge */}
         <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
-          <StatusBadge status={task.status} />
-          <PhaseBadge phase={task.phase} />
+          <StepBadge name={task.step_name} position={task.step_position} />
+          {task.cancelled && (
+            <span
+              style={{
+                background: "var(--status-cancelled)22",
+                color: "var(--status-cancelled)",
+                border: "1px solid var(--status-cancelled)44",
+                padding: "2px 8px",
+                borderRadius: "var(--badge-radius)",
+                fontSize: "11px",
+                fontWeight: 600,
+              }}
+            >
+              Cancelled
+            </span>
+          )}
         </div>
 
         {/* Description */}
@@ -192,8 +220,8 @@ export function TaskDetail({ taskId }: { taskId: string }) {
           )}
         </div>
 
-        {/* Status change buttons */}
-        {availableTransitions.length > 0 && (
+        {/* Step movement buttons */}
+        {!task.cancelled && validTargets.length > 0 && (
           <div style={{ marginBottom: "20px" }}>
             <h4
               style={{
@@ -205,45 +233,57 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                 marginBottom: "8px",
               }}
             >
-              Actions
+              Move to
             </h4>
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              {availableTransitions.map((targetStatus) => {
-                const key = `${currentStatus}->${targetStatus}`;
-                const label = TRANSITION_LABELS[key] ?? targetStatus;
-                return (
-                  <button
-                    key={targetStatus}
-                    onClick={() => statusMutation.mutate(targetStatus)}
-                    disabled={statusMutation.isPending}
-                    style={{
-                      padding: "6px 14px",
-                      background: statusMutation.isPending ? "var(--border)" : "var(--bg)",
-                      color: "var(--text)",
-                      border: "1px solid var(--border)",
-                      borderRadius: "var(--badge-radius)",
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      cursor: statusMutation.isPending ? "not-allowed" : "pointer",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!statusMutation.isPending) {
-                        e.currentTarget.style.background = "var(--bg-hover)";
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!statusMutation.isPending) {
-                        e.currentTarget.style.background = "var(--bg)";
-                      }
-                    }}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
+              {validTargets.map((target) => (
+                <button
+                  key={target.id}
+                  onClick={() => moveMutation.mutate(target.id)}
+                  disabled={isMutating}
+                  style={{
+                    padding: "6px 14px",
+                    background: isMutating ? "var(--border)" : "var(--bg)",
+                    color: "var(--text)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--badge-radius)",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    cursor: isMutating ? "not-allowed" : "pointer",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isMutating) e.currentTarget.style.background = "var(--bg-hover)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isMutating) e.currentTarget.style.background = "var(--bg)";
+                  }}
+                >
+                  {target.position > task.step_position ? `→ ${target.name}` : `← ${target.name}`}
+                </button>
+              ))}
             </div>
           </div>
         )}
+
+        {/* Cancel / Uncancel button */}
+        <div style={{ marginBottom: "20px" }}>
+          <button
+            onClick={() => cancelMutation.mutate(!task.cancelled)}
+            disabled={isMutating}
+            style={{
+              padding: "6px 14px",
+              background: isMutating ? "var(--border)" : "var(--bg)",
+              color: task.cancelled ? "var(--text)" : "var(--status-cancelled)",
+              border: `1px solid ${task.cancelled ? "var(--border)" : "var(--status-cancelled)44"}`,
+              borderRadius: "var(--badge-radius)",
+              fontSize: "13px",
+              fontWeight: 500,
+              cursor: isMutating ? "not-allowed" : "pointer",
+            }}
+          >
+            {task.cancelled ? "Uncancel" : "Cancel"}
+          </button>
+        </div>
 
         {/* Comments */}
         <CommentThread
@@ -286,7 +326,6 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                       marginBottom: "4px",
                     }}
                   >
-                    <PhaseBadge phase={run.phase} />
                     <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
                       {formatTimestamp(run.started_at)}
                     </span>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Comment } from "../types";
-import { PhaseBadge } from "./PhaseBadge";
+import { StepBadge } from "./StepBadge";
 
 interface CommentThreadProps {
   comments: Comment[];
@@ -75,7 +75,7 @@ export function CommentThread({ comments, onAddComment, isSubmitting }: CommentT
                   marginBottom: "6px",
                 }}
               >
-                <PhaseBadge phase={comment.author_role} />
+                <StepBadge name={comment.author_role} />
                 <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
                   {formatTimestamp(comment.created_at)}
                 </span>

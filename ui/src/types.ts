@@ -11,14 +11,25 @@ export interface ProjectDetail extends Project {
   tasks: Record<string, number>;
 }
 
+export interface WorkflowStep {
+  id: string;
+  name: string;
+  position: number;
+  has_agent: boolean;
+  model: string | null;
+  color: string | null;
+}
+
 export interface Task {
   id: string;
   project_id: string;
   parent_task_id: string | null;
   title: string;
   description: string | null;
-  phase: string;
-  status: string;
+  step_id: string;
+  step_name: string;
+  step_position: number;
+  cancelled: boolean;
   branch: string | null;
   worktree_path: string | null;
   session_id: string | null;
@@ -40,7 +51,7 @@ export interface Comment {
 
 export interface AgentRun {
   id: string;
-  phase: string;
+  step_id: string;
   started_at: string;
   completed_at: string | null;
   exit_code: number | null;
@@ -48,18 +59,14 @@ export interface AgentRun {
 }
 
 export interface WebSocketEvent {
-  type: "task_created" | "task_updated" | "comment_added" | "project_created" | "project_updated";
+  type: "task_created" | "task_moved" | "task_cancelled" | "task_uncancelled" | "comment_added" | "project_created" | "project_updated";
   payload: Record<string, unknown>;
 }
 
-export type TasksByStatus = Record<string, Task[]>;
-export type TaskStatus = "backlog" | "in_progress" | "in_review" | "done" | "cancelled";
-export type Phase = "planner" | "coder" | "reviewer" | "orchestrator";
+export interface BoardData {
+  steps: WorkflowStep[];
+  tasks: Record<string, Task[]>;
+  cancelled: Task[];
+}
 
-export const TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
-  backlog: ["in_progress", "cancelled"],
-  in_progress: ["in_review", "cancelled"],
-  in_review: ["in_progress", "done", "cancelled"],
-  done: [],
-  cancelled: [],
-};
+export type TasksByStep = Record<string, Task[]>;

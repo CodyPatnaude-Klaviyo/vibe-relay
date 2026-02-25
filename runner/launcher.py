@@ -24,7 +24,7 @@ def launch_agent(task_id: str, config: dict[str, Any]) -> AgentRunResult:
     Process:
         1. Load task and comments from DB
         2. Create worktree if needed, update task with path/branch
-        3. Load system prompt from config
+        3. Load system prompt from workflow_steps table
         4. Build prompt
         5. Record run start
         6. Execute Claude subprocess
@@ -40,7 +40,7 @@ def launch_agent(task_id: str, config: dict[str, Any]) -> AgentRunResult:
         AgentRunResult with session_id, exit_code, and optional error.
 
     Raises:
-        LaunchError: If the task is not found, not in_progress, or config is invalid.
+        LaunchError: If the task is not found, cancelled, or step has no agent.
         WorktreeError: If worktree creation fails.
         ClaudeRunError: If the Claude CLI cannot be started.
     """
@@ -48,17 +48,21 @@ def launch_agent(task_id: str, config: dict[str, Any]) -> AgentRunResult:
     conn = get_connection(db_path)
 
     try:
-        # 1. Load task
-        task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        # 1. Load task with step info
+        task = conn.execute(
+            """SELECT t.*, ws.name as step_name, ws.system_prompt, ws.model as step_model
+               FROM tasks t
+               JOIN workflow_steps ws ON t.step_id = ws.id
+               WHERE t.id = ?""",
+            (task_id,),
+        ).fetchone()
         if task is None:
             raise LaunchError(f"Task not found: {task_id}")
 
         task_dict = dict(task)
 
-        if task_dict["status"] != "in_progress":
-            raise LaunchError(
-                f"Task {task_id} is '{task_dict['status']}', expected 'in_progress'"
-            )
+        if task_dict["cancelled"]:
+            raise LaunchError(f"Task {task_id} is cancelled")
 
         # Load comments
         comments = conn.execute(
@@ -90,23 +94,27 @@ def launch_agent(task_id: str, config: dict[str, Any]) -> AgentRunResult:
             task_dict["worktree_path"] = str(wt_info.path)
             task_dict["branch"] = wt_info.branch
 
-        # 3. Load system prompt
-        phase = task_dict["phase"]
-        agent_config = config["agents"].get(phase)
-        if agent_config is None:
-            raise LaunchError(f"No agent config for phase: {phase}")
+        # 3. Load system prompt from step
+        system_prompt = task_dict.get("system_prompt")
+        if not system_prompt:
+            raise LaunchError(
+                f"Step '{task_dict.get('step_name', '?')}' has no system_prompt (no agent configured)"
+            )
 
-        repo_path = Path(config["repo_path"])
-        prompt_file = repo_path / agent_config["system_prompt_file"]
-        if not prompt_file.exists():
-            raise LaunchError(f"System prompt file not found: {prompt_file}")
-        system_prompt = prompt_file.read_text()
+        # Determine model: step model > config default_model
+        model = task_dict.get("step_model") or config.get(
+            "default_model", "claude-sonnet-4-5"
+        )
+
+        # Add step_name to task_dict for the prompt builder
+        task_dict["step_name"] = task_dict.get("step_name", "")
 
         # 4. Build prompt
         full_prompt = build_prompt(task_dict, comment_dicts, system_prompt)
 
         # 5. Record run start
-        run_id = start_run(conn, task_id, phase)
+        step_id = task_dict["step_id"]
+        run_id = start_run(conn, task_id, step_id)
 
         # 6-7. Execute Claude subprocess
         existing_session_id = task_dict.get("session_id")
@@ -123,7 +131,7 @@ def launch_agent(task_id: str, config: dict[str, Any]) -> AgentRunResult:
             result = run_agent(
                 prompt=full_prompt,
                 worktree_path=Path(task_dict["worktree_path"]),
-                model=agent_config["model"],
+                model=model,
                 session_id=existing_session_id,
                 task_id=task_id,
                 db_path=db_path,
