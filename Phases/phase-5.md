@@ -1,6 +1,6 @@
 ---
 title: "Phase 5: UI"
-status: not started
+status: complete
 ---
 
 # Phase 5: UI
@@ -143,21 +143,21 @@ ui/
 
 ## Acceptance criteria
 
-- [ ] `npm run dev` starts the dev server, board loads at `http://localhost:5173`
-- [ ] Project list shows all projects from the API
-- [ ] "New Project" modal creates a project and navigates to the board
-- [ ] Board shows four columns with correct tasks in each
-- [ ] Task card shows title, phase badge, comment count, branch name
-- [ ] Clicking a card opens the detail panel
-- [ ] Detail panel shows full comment thread in order
-- [ ] "Add comment" submits and the new comment appears immediately
-- [ ] Status change buttons show only valid next states
-- [ ] Clicking a status change button moves the card to the correct column
-- [ ] Websocket events move cards in real time without page reload
-- [ ] Websocket live indicator shows green when connected, grey when not
-- [ ] Disconnected websocket auto-reconnects
-- [ ] Manual test: in one browser tab, move a task via curl — verify the card moves in the other tab within 1 second
-- [ ] `npm run build` produces a working static build in `ui/dist/`
+- [x] `npm run dev` starts the dev server, board loads at `http://localhost:5173`
+- [x] Project list shows all projects from the API
+- [x] "New Project" modal creates a project and navigates to the board
+- [x] Board shows four columns with correct tasks in each
+- [x] Task card shows title, phase badge, comment count, branch name
+- [x] Clicking a card opens the detail panel
+- [x] Detail panel shows full comment thread in order
+- [x] "Add comment" submits and the new comment appears immediately
+- [x] Status change buttons show only valid next states
+- [x] Clicking a status change button moves the card to the correct column
+- [x] Websocket events move cards in real time without page reload
+- [x] Websocket live indicator shows green when connected, grey when not
+- [x] Disconnected websocket auto-reconnects
+- [x] Manual test: in one browser tab, move a task via curl — verify the card moves in the other tab within 1 second
+- [x] `npm run build` produces a working static build in `ui/dist/`
 
 ---
 

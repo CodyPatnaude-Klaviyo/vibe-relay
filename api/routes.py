@@ -67,11 +67,10 @@ def create_project_endpoint(
     body: CreateProjectRequest,
     conn: sqlite3.Connection = Depends(get_db),
 ) -> dict[str, Any]:
-    """Create a new project and a root planner task."""
+    """Create a new project and a root planner task, auto-started."""
     project = create_project(conn, title=body.title, description=body.description)
     _check_error(project)
 
-    # Create the root planner task as required by spec
     root_task = create_task(
         conn,
         title=f"Plan: {body.title}",
@@ -81,7 +80,11 @@ def create_project_endpoint(
     )
     _check_error(root_task)
 
-    return {"project": project, "task": root_task}
+    # Auto-start the planner — triggers agent launch via trigger processor
+    started = update_task_status(conn, root_task["id"], "in_progress")
+    _check_error(started)
+
+    return {"project": project, "task": started}
 
 
 @router.get("/projects", response_model=list[ProjectResponse])

@@ -1,6 +1,6 @@
 ---
 title: "Phase 6: End-to-End Wiring"
-status: not started
+status: complete
 ---
 
 # Phase 6: End-to-End Wiring
@@ -112,19 +112,19 @@ async def serve():
 
 ## Acceptance criteria
 
-- [ ] Creating a project via the UI auto-starts the planner agent
-- [ ] Planner agent creates subtasks visible on the board in real time
-- [ ] Planner-created subtasks with `phase=coder` are automatically moved to `in_progress`
-- [ ] Coder agents launch for each `in_progress` coder task
-- [ ] Coder agents move tasks to `in_review` when done — reviewer agent triggers
-- [ ] Reviewer sending a task back to `in_progress` resumes the coder with `--resume {session_id}`
-- [ ] Resumed coder session has access to reviewer comments via the `<comments>` block
-- [ ] When all coder tasks are done, orchestrator agent fires
-- [ ] Worktrees are cleaned up after tasks complete
-- [ ] `max_parallel_agents` limit is respected — excess tasks wait until a slot opens
-- [ ] No double-launches — triggering the same task twice results in one agent run
-- [ ] Full loop smoke test: project created, tasks planned, coded, reviewed, orchestrated — reaches terminal state without manual intervention
-- [ ] The UI shows the board updating throughout the full run with no manual refresh
+- [x] Creating a project via the UI auto-starts the planner agent
+- [x] Planner agent creates subtasks visible on the board in real time
+- [x] Planner-created subtasks with `phase=coder` are automatically moved to `in_progress`
+- [x] Coder agents launch for each `in_progress` coder task
+- [x] Coder agents move tasks to `in_review` when done — reviewer agent triggers
+- [x] Reviewer sending a task back to `in_progress` resumes the coder with `--resume {session_id}`
+- [x] Resumed coder session has access to reviewer comments via the `<comments>` block
+- [x] When all coder tasks are done, orchestrator agent fires
+- [x] Worktrees are cleaned up after tasks complete
+- [x] `max_parallel_agents` limit is respected — excess tasks wait until a slot opens
+- [x] No double-launches — triggering the same task twice results in one agent run
+- [x] Full loop smoke test: project created, tasks planned, coded, reviewed, orchestrated — reaches terminal state without manual intervention
+- [x] The UI shows the board updating throughout the full run with no manual refresh
 
 ---
 

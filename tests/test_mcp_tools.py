@@ -75,7 +75,9 @@ class TestCreateTask:
     def test_with_parent_task(self, conn: sqlite3.Connection) -> None:
         pid = _seed_project(conn)
         parent = create_task(conn, "Parent", "P", "planner", pid)
-        child = create_task(conn, "Child", "C", "coder", pid, parent_task_id=parent["id"])
+        child = create_task(
+            conn, "Child", "C", "coder", pid, parent_task_id=parent["id"]
+        )
         assert child["parent_task_id"] == parent["id"]
 
 
@@ -108,7 +110,9 @@ class TestCreateSubtasks:
         assert "subtasks_created" in types
 
     def test_nonexistent_parent_returns_error(self, conn: sqlite3.Connection) -> None:
-        result = create_subtasks(conn, "nonexistent", [{"title": "X", "phase": "coder"}])
+        result = create_subtasks(
+            conn, "nonexistent", [{"title": "X", "phase": "coder"}]
+        )
         assert result.get("error") == "not_found"
 
     def test_invalid_phase_returns_error(self, conn: sqlite3.Connection) -> None:
@@ -312,12 +316,12 @@ class TestCompleteTask:
         # Complete first — siblings not all done yet
         r1 = complete_task(conn, s1_id)
         assert r1["siblings_complete"] is False
-        assert r1["orchestrator_triggered"] is False
+        assert r1["orchestrator_task_id"] is None
 
         # Complete second — now all siblings done
         r2 = complete_task(conn, s2_id)
         assert r2["siblings_complete"] is True
-        assert r2["orchestrator_triggered"] is True
+        assert r2["orchestrator_task_id"] is not None
 
     def test_emits_event(self, conn: sqlite3.Connection) -> None:
         pid = _seed_project(conn)
@@ -356,3 +360,75 @@ class TestEventEmission:
         assert "task_updated" in types
         assert "subtasks_created" in types
         assert len(events) >= 4
+
+
+class TestCompleteTaskOrchestratorCreation:
+    def test_creates_orchestrator_when_siblings_complete(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        """When all siblings are done, complete_task creates an orchestrator task."""
+        # Create a project and parent planner task
+        pid = _seed_project(conn)
+        parent_task = create_task(conn, "Plan", "P", "planner", pid)
+
+        # Create two coder subtasks under the parent
+        t1 = create_task(
+            conn, "Code A", "", "coder", pid, parent_task_id=parent_task["id"]
+        )
+        t2 = create_task(
+            conn, "Code B", "", "coder", pid, parent_task_id=parent_task["id"]
+        )
+
+        # Move both through the state machine to in_review
+        update_task_status(conn, t1["id"], "in_progress")
+        update_task_status(conn, t1["id"], "in_review")
+        update_task_status(conn, t2["id"], "in_progress")
+        update_task_status(conn, t2["id"], "in_review")
+
+        # Complete first — siblings not all done yet
+        r1 = complete_task(conn, t1["id"])
+        assert r1["siblings_complete"] is False
+        assert r1["orchestrator_task_id"] is None
+
+        # Complete second — triggers orchestrator
+        r2 = complete_task(conn, t2["id"])
+        assert r2["siblings_complete"] is True
+        assert r2["orchestrator_task_id"] is not None
+
+        # Verify orchestrator task was created correctly
+        orch = conn.execute(
+            "SELECT * FROM tasks WHERE id = ?", (r2["orchestrator_task_id"],)
+        ).fetchone()
+        assert orch["phase"] == "orchestrator"
+        assert orch["status"] == "in_progress"
+        assert orch["parent_task_id"] == parent_task["id"]
+        assert orch["project_id"] == pid
+
+    def test_no_orchestrator_for_task_without_parent(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        """complete_task on a root task (no parent) does not create orchestrator."""
+        pid = _seed_project(conn)
+        t = create_task(conn, "Solo", "", "coder", pid)
+        update_task_status(conn, t["id"], "in_progress")
+        update_task_status(conn, t["id"], "in_review")
+        result = complete_task(conn, t["id"])
+        assert result["siblings_complete"] is False
+        assert result["orchestrator_task_id"] is None
+
+    def test_no_orchestrator_when_siblings_not_all_done(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        """complete_task doesn't create orchestrator when some siblings still pending."""
+        pid = _seed_project(conn)
+        parent = create_task(conn, "Plan", "", "planner", pid)
+        t1 = create_task(conn, "A", "", "coder", pid, parent_task_id=parent["id"])
+        create_task(conn, "B", "", "coder", pid, parent_task_id=parent["id"])
+
+        update_task_status(conn, t1["id"], "in_progress")
+        update_task_status(conn, t1["id"], "in_review")
+        # t2 stays in backlog
+
+        r1 = complete_task(conn, t1["id"])
+        assert r1["siblings_complete"] is False
+        assert r1["orchestrator_task_id"] is None
