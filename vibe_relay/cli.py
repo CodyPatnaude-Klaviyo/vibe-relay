@@ -91,9 +91,22 @@ def init() -> None:
 
 
 @main.command()
-def serve() -> None:
+@click.option("--port", default=8000, help="Port to run the server on")
+@click.option("--reload", is_flag=True, help="Enable auto-reload for development")
+def serve(port: int, reload: bool) -> None:
     """Start the vibe-relay API server."""
-    click.echo("Server not yet implemented.")
+    import uvicorn
+
+    click.echo(f"Starting vibe-relay server on port {port}...")
+    if reload:
+        click.echo("Auto-reload enabled")
+
+    uvicorn.run(
+        "api.app:app",
+        host="0.0.0.0",
+        port=port,
+        reload=reload,
+    )
 
 
 @main.command()
