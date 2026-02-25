@@ -382,8 +382,8 @@ class TestEventBroadcasting:
         for e in get_unconsumed_events(conn):
             mark_event_consumed(conn, e["id"])
 
-        # Update task status
-        await client.patch(f"/tasks/{task_id}", json={"status": "in_progress"})
+        # Update task status (root task is auto-started to in_progress)
+        await client.patch(f"/tasks/{task_id}", json={"status": "in_review"})
 
         events = get_unconsumed_events(conn)
         event_types = [e["type"] for e in events]

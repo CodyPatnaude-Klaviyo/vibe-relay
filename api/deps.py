@@ -50,6 +50,31 @@ def mark_event_consumed(conn: sqlite3.Connection, event_id: str) -> None:
     conn.commit()
 
 
+def get_unconsumed_trigger_events(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """Fetch unconsumed trigger events (task state changes and orchestrator triggers)."""
+    rows = conn.execute(
+        """SELECT id, type, payload, created_at FROM events
+           WHERE trigger_consumed = 0
+             AND type IN ('task_updated', 'orchestrator_trigger')
+           ORDER BY created_at"""
+    ).fetchall()
+    return [
+        {
+            "id": row["id"],
+            "type": row["type"],
+            "payload": json.loads(row["payload"]),
+            "created_at": row["created_at"],
+        }
+        for row in rows
+    ]
+
+
+def mark_trigger_consumed(conn: sqlite3.Connection, event_id: str) -> None:
+    """Mark an event as consumed by the trigger processor."""
+    conn.execute("UPDATE events SET trigger_consumed = 1 WHERE id = ?", (event_id,))
+    conn.commit()
+
+
 def get_task_counts_by_status(
     conn: sqlite3.Connection, project_id: str
 ) -> dict[str, int]:

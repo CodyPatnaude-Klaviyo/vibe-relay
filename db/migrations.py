@@ -21,6 +21,15 @@ def run_migrations(conn: sqlite3.Connection) -> None:
         conn.execute(TABLES[table_name])
     conn.commit()
 
+    # Add trigger_consumed column to events if it doesn't exist (Phase 6)
+    try:
+        conn.execute(
+            "ALTER TABLE events ADD COLUMN trigger_consumed INTEGER NOT NULL DEFAULT 0"
+        )
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
 
 def init_db(db_path: str | Path) -> sqlite3.Connection:
     """Open a connection, run migrations, and return the ready connection."""

@@ -16,7 +16,6 @@ from pathlib import Path
 
 import pytest
 
-from db.client import get_connection
 from db.migrations import init_db, run_migrations
 
 
@@ -187,5 +186,5 @@ class TestTaskColumns:
     def test_events_has_all_columns(self, conn: sqlite3.Connection) -> None:
         columns = conn.execute("PRAGMA table_info(events)").fetchall()
         column_names = [c["name"] for c in columns]
-        expected = ["id", "type", "payload", "created_at", "consumed"]
+        expected = ["id", "type", "payload", "created_at", "consumed", "trigger_consumed"]
         assert column_names == expected

@@ -96,7 +96,7 @@ def init() -> None:
     "--reload", "use_reload", is_flag=True, help="Enable auto-reload for development"
 )
 def serve(port: int, use_reload: bool) -> None:
-    """Start the vibe-relay API server."""
+    """Start the vibe-relay API server with trigger processor."""
     import uvicorn
 
     from db.migrations import init_db
@@ -113,7 +113,7 @@ def serve(port: int, use_reload: bool) -> None:
 
     from api.app import create_app
 
-    app = create_app(db_path=config["db_path"])
+    app = create_app(db_path=config["db_path"], config=config)
     uvicorn.run(app, host="0.0.0.0", port=port, reload=use_reload)
 
 
