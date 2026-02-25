@@ -1,0 +1,49 @@
+"""Prompt builder for vibe-relay agent runner.
+
+Builds the structured prompt injected into each agent run,
+following the format defined in ARCHITECTURE.md.
+"""
+
+
+def build_prompt(
+    task: dict[str, str | None],
+    comments: list[dict[str, str]],
+    system_prompt: str,
+) -> str:
+    """Build the full agent prompt from task data, comments, and system prompt.
+
+    Output format:
+        <system_prompt>...</system_prompt>
+        <issue>Title: ... Description: ... Phase: ... Branch: ... Worktree: ...</issue>
+        <comments>[role] timestamp: content ...</comments>
+
+    The <comments> block is omitted if there are no comments.
+
+    Args:
+        task: Task dict with keys: title, description, phase, branch, worktree_path.
+        comments: List of comment dicts with keys: author_role, created_at, content.
+        system_prompt: Contents of the role-specific system prompt file.
+
+    Returns:
+        The formatted prompt string.
+    """
+    parts: list[str] = []
+
+    parts.append(f"<system_prompt>\n{system_prompt}\n</system_prompt>")
+
+    issue_lines = [
+        f"Title: {task.get('title', '')}",
+        f"Description: {task.get('description', '')}",
+        f"Phase: {task.get('phase', '')}",
+        f"Branch: {task.get('branch', '')}",
+        f"Worktree: {task.get('worktree_path', '')}",
+    ]
+    parts.append(f"<issue>\n{chr(10).join(issue_lines)}\n</issue>")
+
+    if comments:
+        comment_lines = [
+            f"[{c['author_role']}] {c['created_at']}: {c['content']}" for c in comments
+        ]
+        parts.append(f"<comments>\n{chr(10).join(comment_lines)}\n</comments>")
+
+    return "\n\n".join(parts)

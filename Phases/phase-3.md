@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: Agent Runner"
-status: not started
+status: complete
 ---
 
 # Phase 3: Agent Runner
@@ -163,20 +163,20 @@ Useful for manual testing and debugging individual agent runs without the full a
 
 ## Acceptance criteria
 
-- [ ] `create_worktree` creates a new git branch and worktree at the correct path
-- [ ] `create_worktree` is idempotent — called twice for same task, second call is a no-op
-- [ ] `remove_worktree` removes the worktree directory and git registration
-- [ ] `build_prompt` produces correctly structured output with all three sections
-- [ ] `build_prompt` omits `<comments>` block when there are no comments
-- [ ] `run_agent` launches `claude` subprocess and captures exit code
-- [ ] `run_agent` captures `session_id` from JSON output and returns it
-- [ ] `run_agent` passes `--resume {session_id}` when session_id is provided
-- [ ] `run_agent` writes MCP config to temp file and passes it to claude
-- [ ] `launch_agent` creates a worktree on first run and stores path/branch on task
-- [ ] `launch_agent` reuses existing worktree on subsequent runs
-- [ ] `launch_agent` stores `session_id` on the task record after first response
-- [ ] `agent_runs` table is updated with start time, completion time, and exit code
-- [ ] `vibe-relay run-agent --task-id <id>` executes end-to-end against a real task
+- [x] `create_worktree` creates a new git branch and worktree at the correct path
+- [x] `create_worktree` is idempotent — called twice for same task, second call is a no-op
+- [x] `remove_worktree` removes the worktree directory and git registration
+- [x] `build_prompt` produces correctly structured output with all three sections
+- [x] `build_prompt` omits `<comments>` block when there are no comments
+- [x] `run_agent` launches `claude` subprocess and captures exit code
+- [x] `run_agent` captures `session_id` from JSON output and returns it
+- [x] `run_agent` passes `--resume {session_id}` when session_id is provided
+- [x] `run_agent` writes MCP config to temp file and passes it to claude
+- [x] `launch_agent` creates a worktree on first run and stores path/branch on task
+- [x] `launch_agent` reuses existing worktree on subsequent runs
+- [x] `launch_agent` stores `session_id` on the task record after first response
+- [x] `agent_runs` table is updated with start time, completion time, and exit code
+- [x] `vibe-relay run-agent --task-id <id>` executes end-to-end against a real task
 - [ ] Manual test: create a task via MCP, run `vibe-relay run-agent`, verify the agent can call `get_task` and `add_comment` via MCP during its run
 
 ---
