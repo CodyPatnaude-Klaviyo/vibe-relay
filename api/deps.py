@@ -50,11 +50,14 @@ def mark_event_consumed(conn: sqlite3.Connection, event_id: str) -> None:
 
 
 def get_unconsumed_trigger_events(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    """Fetch unconsumed trigger events (task creation, movements, and cancellations)."""
+    """Fetch unconsumed trigger events."""
     rows = conn.execute(
         """SELECT id, type, payload, created_at FROM events
            WHERE trigger_consumed = 0
-             AND type IN ('task_created', 'task_moved', 'task_cancelled')
+             AND type IN (
+                 'task_created', 'task_moved', 'task_cancelled',
+                 'plan_approved', 'task_ready', 'milestone_completed'
+             )
            ORDER BY created_at"""
     ).fetchall()
     return [
@@ -124,7 +127,11 @@ def get_tasks_grouped_by_step(
     rows = conn.execute(
         """SELECT t.*,
                   ws.name as step_name,
-                  ws.position as step_position
+                  ws.position as step_position,
+                  EXISTS(
+                      SELECT 1 FROM agent_runs ar
+                      WHERE ar.task_id = t.id AND ar.completed_at IS NULL
+                  ) as has_active_run
            FROM tasks t
            JOIN workflow_steps ws ON t.step_id = ws.id
            WHERE t.project_id = ?
@@ -135,6 +142,8 @@ def get_tasks_grouped_by_step(
     for row in rows:
         task = dict(row)
         task["cancelled"] = bool(task["cancelled"])
+        task["plan_approved"] = bool(task.get("plan_approved", 0))
+        task["has_active_run"] = bool(task.get("has_active_run", 0))
         if task["cancelled"]:
             cancelled.append(task)
         else:
@@ -142,10 +151,20 @@ def get_tasks_grouped_by_step(
             if step_list is not None:
                 step_list.append(task)
 
+    # Fetch dependencies
+    all_deps = conn.execute(
+        """SELECT td.id, td.predecessor_id, td.successor_id
+           FROM task_dependencies td
+           JOIN tasks t ON td.predecessor_id = t.id
+           WHERE t.project_id = ?""",
+        (project_id,),
+    ).fetchall()
+
     return {
         "steps": [dict(s) for s in steps],
         "tasks": tasks_by_step,
         "cancelled": cancelled,
+        "dependencies": [dict(d) for d in all_deps],
     }
 
 
@@ -170,13 +189,21 @@ def enrich_event_payload(
         "task_moved",
         "task_cancelled",
         "task_uncancelled",
+        "plan_approved",
+        "task_ready",
+        "task_updated",
+        "milestone_completed",
     ):
         task_id = payload.get("task_id")
         if task_id:
             task = conn.execute(
                 """SELECT t.*,
                           ws.name as step_name,
-                          ws.position as step_position
+                          ws.position as step_position,
+                          EXISTS(
+                              SELECT 1 FROM agent_runs ar
+                              WHERE ar.task_id = t.id AND ar.completed_at IS NULL
+                          ) as has_active_run
                    FROM tasks t
                    JOIN workflow_steps ws ON t.step_id = ws.id
                    WHERE t.id = ?""",
@@ -185,6 +212,7 @@ def enrich_event_payload(
             if task:
                 task_dict = dict(task)
                 task_dict["cancelled"] = bool(task_dict["cancelled"])
+                task_dict["has_active_run"] = bool(task_dict.get("has_active_run", 0))
                 return {"type": event_type, "payload": task_dict}
 
     elif event_type == "comment_added":
