@@ -386,7 +386,7 @@ def complete_task(
     # Check sibling completion
     parent_task_id = task["parent_task_id"]
     siblings_complete = False
-    orchestrator_triggered = False
+    orchestrator_task_id = None
 
     if parent_task_id:
         siblings = conn.execute(
@@ -396,20 +396,53 @@ def complete_task(
         siblings_complete = all(s["status"] == "done" for s in siblings)
 
         if siblings_complete and siblings:
+            # Create orchestrator task in in_progress
+            orch_id = _uuid()
+            orch_now = _now()
+            conn.execute(
+                """INSERT INTO tasks
+                   (id, project_id, parent_task_id, title, description, phase, status, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, 'in_progress', ?, ?)""",
+                (
+                    orch_id,
+                    task["project_id"],
+                    parent_task_id,
+                    "Orchestrate: merge and verify",
+                    "All sibling tasks complete. Review merged code, run checks, and finalize.",
+                    "orchestrator",
+                    orch_now,
+                    orch_now,
+                ),
+            )
+            emit_event(
+                conn,
+                "task_created",
+                {"task_id": orch_id, "project_id": task["project_id"]},
+            )
+            emit_event(
+                conn,
+                "task_updated",
+                {
+                    "task_id": orch_id,
+                    "old_status": "backlog",
+                    "new_status": "in_progress",
+                },
+            )
             emit_event(
                 conn,
                 "orchestrator_trigger",
                 {
                     "parent_task_id": parent_task_id,
                     "project_id": task["project_id"],
+                    "orchestrator_task_id": orch_id,
                 },
             )
             conn.commit()
-            orchestrator_triggered = True
+            orchestrator_task_id = orch_id
 
     updated = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
     return {
         "task": _row_to_dict(updated),
         "siblings_complete": siblings_complete,
-        "orchestrator_triggered": orchestrator_triggered,
+        "orchestrator_task_id": orchestrator_task_id,
     }
