@@ -11,6 +11,8 @@ TABLES = {
             id          TEXT PRIMARY KEY,
             title       TEXT NOT NULL,
             description TEXT,
+            repo_path   TEXT,
+            base_branch TEXT,
             status      TEXT NOT NULL DEFAULT 'active',
             created_at  TEXT NOT NULL,
             updated_at  TEXT NOT NULL
@@ -39,11 +41,23 @@ TABLES = {
             description     TEXT,
             step_id         TEXT NOT NULL REFERENCES workflow_steps(id),
             cancelled       INTEGER NOT NULL DEFAULT 0,
+            type            TEXT NOT NULL DEFAULT 'task',
+            plan_approved   INTEGER NOT NULL DEFAULT 0,
+            output          TEXT,
             worktree_path   TEXT,
             branch          TEXT,
             session_id      TEXT,
             created_at      TEXT NOT NULL,
             updated_at      TEXT NOT NULL
+        )
+    """,
+    "task_dependencies": """
+        CREATE TABLE IF NOT EXISTS task_dependencies (
+            id              TEXT PRIMARY KEY,
+            predecessor_id  TEXT NOT NULL REFERENCES tasks(id),
+            successor_id    TEXT NOT NULL REFERENCES tasks(id),
+            created_at      TEXT NOT NULL,
+            UNIQUE(predecessor_id, successor_id)
         )
     """,
     "comments": """
@@ -90,6 +104,7 @@ TABLE_CREATION_ORDER = [
     "projects",
     "workflow_steps",
     "tasks",
+    "task_dependencies",
     "comments",
     "agent_runs",
     "ports",

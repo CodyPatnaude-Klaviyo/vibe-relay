@@ -133,10 +133,10 @@ class TestCreateProject:
         data = await _create_project(client)
         project_id = data["project"]["id"]
         steps = await _get_steps(client, project_id)
-        # Default workflow: Plan, Implement, Review, Done
-        assert len(steps) == 4
+        # Default 7-step SDLC workflow: Plan, Design, Backlog, Implement, Test, Review, Done
+        assert len(steps) == 7
         assert steps[0]["name"] == "Plan"
-        assert steps[3]["name"] == "Done"
+        assert steps[6]["name"] == "Done"
 
     @pytest.mark.asyncio
     async def test_create_project_default_description(
@@ -218,9 +218,12 @@ class TestGetProject:
         resp = await client.get(f"/projects/{project_id}")
         body = resp.json()
         tasks = body["tasks"]
-        # Should have step names from workflow
+        # Should have step names from 7-step workflow
         assert "Plan" in tasks
+        assert "Design" in tasks
+        assert "Backlog" in tasks
         assert "Implement" in tasks
+        assert "Test" in tasks
         assert "Review" in tasks
         assert "Done" in tasks
         assert "cancelled" in tasks
@@ -270,9 +273,9 @@ class TestListProjectSteps:
         project_id = data["project"]["id"]
 
         steps = await _get_steps(client, project_id)
-        assert len(steps) == 4
+        assert len(steps) == 7
         assert steps[0]["position"] == 0
-        assert steps[3]["position"] == 3
+        assert steps[6]["position"] == 6
 
     @pytest.mark.asyncio
     async def test_nonexistent_project_404(self, client: AsyncClient) -> None:
@@ -309,10 +312,12 @@ class TestCreateTask:
         )
         assert task["title"] == "Write code"
         assert task["step_id"] == steps[1]["id"]
-        assert task["step_name"] == "Implement"
+        assert task["step_name"] == "Design"
         assert task["cancelled"] is False
         assert task["project_id"] == project_id
         assert task["parent_task_id"] is None
+        assert task["type"] == "task"
+        assert task["plan_approved"] is False
 
     @pytest.mark.asyncio
     async def test_create_task_with_parent(self, client: AsyncClient) -> None:

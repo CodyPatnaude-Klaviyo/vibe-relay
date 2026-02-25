@@ -1,4 +1,4 @@
-import type { AgentRun, BoardData, Comment, Task, TaskDetail } from "../types";
+import type { AgentRun, BoardData, Comment, DependencyInfo, Task, TaskDetail } from "../types";
 import { apiFetch } from "./client";
 
 export function listProjectTasks(projectId: string): Promise<BoardData> {
@@ -11,7 +11,7 @@ export function getTask(taskId: string): Promise<TaskDetail> {
 
 export function updateTask(
   taskId: string,
-  updates: { step_id?: string; cancelled?: boolean; title?: string; description?: string }
+  updates: { step_id?: string; cancelled?: boolean; title?: string; description?: string; output?: string }
 ): Promise<TaskDetail> {
   return apiFetch(`/tasks/${taskId}`, {
     method: "PATCH",
@@ -39,5 +39,28 @@ export function createTask(
   return apiFetch(`/projects/${projectId}/tasks`, {
     method: "POST",
     body: JSON.stringify({ title, description: description ?? "", step_id: stepId }),
+  });
+}
+
+export function approvePlan(taskId: string): Promise<TaskDetail> {
+  return apiFetch(`/tasks/${taskId}/approve`, {
+    method: "POST",
+  });
+}
+
+export function getTaskDependencies(taskId: string): Promise<DependencyInfo> {
+  return apiFetch(`/tasks/${taskId}/dependencies`);
+}
+
+export function addDependency(predecessorId: string, successorId: string): Promise<void> {
+  return apiFetch(`/tasks/${predecessorId}/dependencies`, {
+    method: "POST",
+    body: JSON.stringify({ predecessor_id: predecessorId, successor_id: successorId }),
+  });
+}
+
+export function removeDependency(dependencyId: string): Promise<void> {
+  return apiFetch(`/dependencies/${dependencyId}`, {
+    method: "DELETE",
   });
 }

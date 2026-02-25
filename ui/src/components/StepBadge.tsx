@@ -1,21 +1,14 @@
-const STEP_PALETTE = [
-  "#a855f7", // purple
-  "#3b82f6", // blue
-  "#f97316", // orange
-  "#22c55e", // green
-  "#ef4444", // red
-  "#06b6d4", // cyan
-  "#eab308", // yellow
-  "#ec4899", // pink
-];
+import { STEP_PALETTE, withAlpha } from "../utils/colors";
 
 export function StepBadge({ name, color, position }: { name: string; color?: string | null; position?: number }) {
-  const bg = color ?? STEP_PALETTE[(position ?? 0) % STEP_PALETTE.length];
+  const stepColor = color ?? STEP_PALETTE[(position ?? 0) % STEP_PALETTE.length];
   return (
     <span
       style={{
-        background: bg,
-        color: "#fff",
+        background: withAlpha(stepColor, 0.12),
+        color: stepColor,
+        border: `1px solid ${withAlpha(stepColor, 0.25)}`,
+        backdropFilter: "blur(4px)",
         padding: "2px 8px",
         borderRadius: "var(--badge-radius)",
         fontSize: "11px",

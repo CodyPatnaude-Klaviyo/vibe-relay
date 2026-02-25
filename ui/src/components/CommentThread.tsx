@@ -33,12 +33,14 @@ export function CommentThread({ comments, onAddComment, isSubmitting }: CommentT
     <div style={{ marginTop: "24px" }}>
       <h4
         style={{
-          fontSize: "13px",
+          fontSize: "11px",
           fontWeight: 600,
           textTransform: "uppercase",
           letterSpacing: "0.5px",
           color: "var(--text-muted)",
           marginBottom: "12px",
+          paddingLeft: "10px",
+          borderLeft: "2px solid var(--phase-reviewer)",
         }}
       >
         Comments
@@ -47,8 +49,8 @@ export function CommentThread({ comments, onAddComment, isSubmitting }: CommentT
       {comments.length === 0 ? (
         <div
           style={{
-            color: "var(--text-muted)",
-            fontSize: "13px",
+            color: "var(--text-dim)",
+            fontSize: "12px",
             fontStyle: "italic",
             padding: "12px 0",
           }}
@@ -56,15 +58,16 @@ export function CommentThread({ comments, onAddComment, isSubmitting }: CommentT
           No comments yet.
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "16px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "16px" }}>
           {comments.map((comment) => (
             <div
               key={comment.id}
               style={{
-                background: "var(--bg)",
-                border: "1px solid var(--border)",
+                background: "var(--glass-bg)",
+                border: "1px solid var(--glass-border)",
                 borderRadius: "var(--card-radius)",
                 padding: "10px 12px",
+                backdropFilter: "blur(4px)",
               }}
             >
               <div
@@ -76,7 +79,7 @@ export function CommentThread({ comments, onAddComment, isSubmitting }: CommentT
                 }}
               >
                 <StepBadge name={comment.author_role} />
-                <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>
                   {formatTimestamp(comment.created_at)}
                 </span>
               </div>
@@ -104,6 +107,16 @@ export function CommentThread({ comments, onAddComment, isSubmitting }: CommentT
             fontSize: "13px",
             fontFamily: "inherit",
             resize: "vertical",
+            outline: "none",
+            transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+          }}
+          onFocus={(e) => {
+            e.currentTarget.style.borderColor = "var(--agent-active)";
+            e.currentTarget.style.boxShadow = "0 0 8px rgba(59,130,246,0.15)";
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = "var(--border)";
+            e.currentTarget.style.boxShadow = "none";
           }}
         />
         <button
@@ -119,6 +132,15 @@ export function CommentThread({ comments, onAddComment, isSubmitting }: CommentT
             fontSize: "13px",
             fontWeight: 600,
             cursor: isSubmitting || !content.trim() ? "not-allowed" : "pointer",
+            transition: "box-shadow 0.2s ease",
+          }}
+          onMouseEnter={(e) => {
+            if (!isSubmitting && content.trim()) {
+              e.currentTarget.style.boxShadow = "0 0 12px rgba(59,130,246,0.3)";
+            }
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.boxShadow = "none";
           }}
         >
           {isSubmitting ? "Posting..." : "Post Comment"}
