@@ -104,7 +104,7 @@ class TestCreateProject:
         data = await _create_project(client, title="My Project")
         task = data["task"]
         assert task["phase"] == "planner"
-        assert task["status"] == "backlog"
+        assert task["status"] == "in_progress"
         assert task["title"].startswith("Plan:")
 
     @pytest.mark.asyncio
@@ -178,8 +178,8 @@ class TestGetProject:
         body = resp.json()
         assert body["id"] == project_id
         assert "tasks" in body
-        # Root planner task is in backlog
-        assert body["tasks"]["backlog"] == 1
+        # Root planner task is auto-started to in_progress
+        assert body["tasks"]["in_progress"] == 1
 
     @pytest.mark.asyncio
     async def test_get_project_404(self, client: AsyncClient) -> None:
@@ -315,7 +315,7 @@ class TestListTasks:
         assert set(body.keys()) == expected_statuses
 
     @pytest.mark.asyncio
-    async def test_root_task_in_backlog(self, client: AsyncClient) -> None:
+    async def test_root_task_in_in_progress(self, client: AsyncClient) -> None:
         data = await _create_project(client)
         project_id = data["project"]["id"]
         root_task_id = data["task"]["id"]
@@ -323,8 +323,8 @@ class TestListTasks:
         resp = await client.get(f"/projects/{project_id}/tasks")
         body = resp.json()
 
-        backlog_ids = [t["id"] for t in body["backlog"]]
-        assert root_task_id in backlog_ids
+        in_progress_ids = [t["id"] for t in body["in_progress"]]
+        assert root_task_id in in_progress_ids
 
     @pytest.mark.asyncio
     async def test_list_tasks_nonexistent_project_404(
@@ -343,8 +343,9 @@ class TestListTasks:
 
         resp = await client.get(f"/projects/{project_id}/tasks")
         body = resp.json()
-        # Root planner task + 2 new tasks = 3 in backlog
-        assert len(body["backlog"]) == 3
+        # Root planner task is in_progress, 2 new tasks in backlog
+        assert len(body["backlog"]) == 2
+        assert len(body["in_progress"]) == 1
 
 
 # ── TestGetTask ───────────────────────────────────────────
@@ -422,17 +423,17 @@ class TestUpdateTask:
         data = await _create_project(client)
         task_id = data["task"]["id"]
 
-        # backlog -> in_progress is valid
-        resp = await client.patch(f"/tasks/{task_id}", json={"status": "in_progress"})
+        # Root task is auto-started to in_progress; in_progress -> in_review is valid
+        resp = await client.patch(f"/tasks/{task_id}", json={"status": "in_review"})
         assert resp.status_code == 200
-        assert resp.json()["status"] == "in_progress"
+        assert resp.json()["status"] == "in_review"
 
     @pytest.mark.asyncio
     async def test_invalid_status_transition_422(self, client: AsyncClient) -> None:
         data = await _create_project(client)
         task_id = data["task"]["id"]
 
-        # backlog -> done is invalid
+        # in_progress -> done is invalid (must go through in_review first)
         resp = await client.patch(f"/tasks/{task_id}", json={"status": "done"})
         assert resp.status_code == 422
 
@@ -461,13 +462,14 @@ class TestUpdateTask:
         data = await _create_project(client)
         task_id = data["task"]["id"]
 
+        # Root task is auto-started to in_progress; move to in_review with title update
         resp = await client.patch(
             f"/tasks/{task_id}",
-            json={"status": "in_progress", "title": "Active Task"},
+            json={"status": "in_review", "title": "Active Task"},
         )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["status"] == "in_progress"
+        assert body["status"] == "in_review"
         assert body["title"] == "Active Task"
 
     @pytest.mark.asyncio
@@ -477,11 +479,12 @@ class TestUpdateTask:
 
     @pytest.mark.asyncio
     async def test_chain_valid_transitions(self, client: AsyncClient) -> None:
-        """Test a full lifecycle: backlog -> in_progress -> in_review -> done."""
+        """Test a full lifecycle: in_progress -> in_review -> done."""
         data = await _create_project(client)
         task_id = data["task"]["id"]
 
-        for status in ["in_progress", "in_review", "done"]:
+        # Root task is auto-started to in_progress
+        for status in ["in_review", "done"]:
             resp = await client.patch(f"/tasks/{task_id}", json={"status": status})
             assert resp.status_code == 200
             assert resp.json()["status"] == status
