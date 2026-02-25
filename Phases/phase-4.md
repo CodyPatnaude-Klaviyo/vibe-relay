@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: API + Websocket"
-status: not started
+status: complete
 ---
 
 # Phase 4: API + Websocket
@@ -204,20 +204,20 @@ Defaults: port 8000, no reload. `--reload` enables uvicorn's auto-reload for dev
 
 ## Acceptance criteria
 
-- [ ] `vibe-relay serve` starts uvicorn and accepts requests on port 8000
-- [ ] `POST /projects` creates a project and a root planner task, returns both
-- [ ] `GET /projects/{id}` returns project with task count by status
-- [ ] `GET /projects/{id}/tasks` returns tasks grouped by status column
-- [ ] `GET /tasks/{id}` returns task with full comment thread
-- [ ] `PATCH /tasks/{id}` with valid status transition updates the task
-- [ ] `PATCH /tasks/{id}` with invalid transition returns 422 with descriptive message
-- [ ] `POST /tasks/{id}/comments` adds a comment and returns it
-- [ ] `GET /tasks/{id}/runs` returns agent run history
-- [ ] `GET /ws` accepts websocket connection
-- [ ] When a task is updated (via API or MCP), connected websocket clients receive the event within 1 second
-- [ ] Websocket events include the full updated object, not just an ID
-- [ ] Manual test: open two browser tabs with a websocket client, update a task via curl, verify both tabs receive the event
-- [ ] Manual test: update a task via the MCP server directly, verify the websocket client receives the event (confirms the events table bridging works)
+- [x] `vibe-relay serve` starts uvicorn and accepts requests on port 8000
+- [x] `POST /projects` creates a project and a root planner task, returns both
+- [x] `GET /projects/{id}` returns project with task count by status
+- [x] `GET /projects/{id}/tasks` returns tasks grouped by status column
+- [x] `GET /tasks/{id}` returns task with full comment thread
+- [x] `PATCH /tasks/{id}` with valid status transition updates the task
+- [x] `PATCH /tasks/{id}` with invalid transition returns 422 with descriptive message
+- [x] `POST /tasks/{id}/comments` adds a comment and returns it
+- [x] `GET /tasks/{id}/runs` returns agent run history
+- [x] `GET /ws` accepts websocket connection
+- [x] When a task is updated (via API or MCP), connected websocket clients receive the event within 1 second
+- [x] Websocket events include the full updated object, not just an ID
+- [x] Manual test: open two browser tabs with a websocket client, update a task via curl, verify both tabs receive the event
+- [x] Manual test: update a task via the MCP server directly, verify the websocket client receives the event (confirms the events table bridging works)
 
 ---
 
