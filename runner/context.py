@@ -32,6 +32,9 @@ def build_prompt(
     parts.append(f"<system_prompt>\n{system_prompt}\n</system_prompt>")
 
     issue_lines = [
+        f"Task ID: {task.get('id', '')}",
+        f"Project ID: {task.get('project_id', '')}",
+        f"Parent Task ID: {task.get('parent_task_id', '')}",
         f"Title: {task.get('title', '')}",
         f"Description: {task.get('description', '')}",
         f"Step: {task.get('step_name', '')}",

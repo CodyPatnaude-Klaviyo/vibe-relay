@@ -111,11 +111,11 @@ def _resolve_workflow_steps(
             steps.append(step)
         return steps
 
-    # Default 7-step SDLC workflow
+    # Default 7-step workflow
     return [
         {"name": "Plan"},
-        {"name": "Design"},
-        {"name": "Backlog"},
+        {"name": "Research"},
+        {"name": "Synthesize"},
         {"name": "Implement"},
         {"name": "Test"},
         {"name": "Review"},

@@ -173,7 +173,7 @@ def _can_dispatch_task(conn: sqlite3.Connection, task_id: str) -> bool:
 def _handle_task_ready(
     conn: sqlite3.Connection, event: dict[str, Any], config: dict[str, Any]
 ) -> None:
-    """Handle task_ready events: move task from Backlog to next agent step."""
+    """Handle task_ready events: dispatch task at current step or advance to next agent step."""
     from vibe_relay.mcp.events import emit_event
 
     task_id = event["payload"].get("task_id")
@@ -181,7 +181,8 @@ def _handle_task_ready(
         return
 
     task = conn.execute(
-        """SELECT t.*, ws.position as current_position, ws.name as step_name
+        """SELECT t.*, ws.position as current_position, ws.name as step_name,
+                  ws.system_prompt as current_system_prompt
            FROM tasks t
            JOIN workflow_steps ws ON t.step_id = ws.id
            WHERE t.id = ?""",
@@ -190,7 +191,17 @@ def _handle_task_ready(
     if task is None or task["cancelled"]:
         return
 
-    # Find next step with an agent after current position
+    # If current step already has an agent, dispatch here (don't advance)
+    if task["current_system_prompt"]:
+        emit_event(
+            conn,
+            "task_created",
+            {"task_id": task_id, "project_id": task["project_id"]},
+        )
+        conn.commit()
+        return
+
+    # Otherwise find next step with an agent after current position
     next_agent_step = conn.execute(
         """SELECT id, name, position FROM workflow_steps
            WHERE project_id = ? AND position > ? AND system_prompt IS NOT NULL

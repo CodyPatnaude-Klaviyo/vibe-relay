@@ -120,15 +120,16 @@ def create_server() -> FastMCP:
         )
         return json.dumps(result, indent=2)
 
-    @server.tool(description="Bulk create subtasks under a parent task")
+    @server.tool(description="Bulk create subtasks under a parent task. Use 'dependencies' to atomically set up blocking edges between tasks in the same batch (e.g. [{\"from_index\": 0, \"to_index\": 3}] means task at index 0 blocks task at index 3).")
     def create_subtasks(
         parent_task_id: str,
         tasks: list[dict[str, str]],
         default_step_id: str | None = None,
+        dependencies: list[dict[str, int]] | None = None,
         ctx: Context = None,  # type: ignore[assignment]
     ) -> str:
         conn = _get_conn(ctx)
-        result = tools.create_subtasks(conn, parent_task_id, tasks, default_step_id)
+        result = tools.create_subtasks(conn, parent_task_id, tasks, default_step_id, dependencies)
         return json.dumps(result, indent=2)
 
     @server.tool(

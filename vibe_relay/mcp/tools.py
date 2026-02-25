@@ -485,11 +485,17 @@ def create_subtasks(
     parent_task_id: str,
     tasks: list[dict[str, str]],
     default_step_id: str | None = None,
+    dependencies: list[dict[str, int]] | None = None,
 ) -> dict[str, Any]:
     """Bulk create subtasks under a parent.
 
     If default_step_id is not provided, subtasks are placed at the next step
-    after the parent's current step.
+    after the parent's current step (with a fallback to the first agent step
+    if the parent is at the terminal step).
+
+    dependencies: optional list of {"from_index": i, "to_index": j} dicts
+    that create dependency edges between tasks in the same batch. Edges are
+    created BEFORE task_created events are emitted, preventing race conditions.
     """
     parent = conn.execute(
         "SELECT id, project_id, step_id FROM tasks WHERE id = ?", (parent_task_id,)
@@ -515,7 +521,17 @@ def create_subtasks(
         if next_step:
             default_step_id = next_step["id"]
         else:
-            default_step_id = parent["step_id"]
+            # Parent is at terminal step — find first step with an agent
+            first_agent = conn.execute(
+                """SELECT id FROM workflow_steps
+                   WHERE project_id = ? AND system_prompt IS NOT NULL
+                   ORDER BY position LIMIT 1""",
+                (project_id,),
+            ).fetchone()
+            if first_agent:
+                default_step_id = first_agent["id"]
+            else:
+                default_step_id = parent["step_id"]
 
     created = []
     now = _now()
@@ -573,6 +589,20 @@ def create_subtasks(
                 "updated_at": now,
             }
         )
+
+    # Create dependency edges BEFORE emitting events (prevents race conditions)
+    if dependencies:
+        for dep in dependencies:
+            from_idx = dep.get("from_index", dep.get("from"))
+            to_idx = dep.get("to_index", dep.get("to"))
+            if from_idx is not None and to_idx is not None:
+                if 0 <= from_idx < len(created) and 0 <= to_idx < len(created):
+                    dep_id = _uuid()
+                    conn.execute(
+                        """INSERT INTO task_dependencies (id, predecessor_id, successor_id, created_at)
+                           VALUES (?, ?, ?, ?)""",
+                        (dep_id, created[from_idx]["id"], created[to_idx]["id"], now),
+                    )
 
     emit_event(
         conn,

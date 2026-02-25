@@ -220,8 +220,8 @@ class TestGetProject:
         tasks = body["tasks"]
         # Should have step names from 7-step workflow
         assert "Plan" in tasks
-        assert "Design" in tasks
-        assert "Backlog" in tasks
+        assert "Research" in tasks
+        assert "Synthesize" in tasks
         assert "Implement" in tasks
         assert "Test" in tasks
         assert "Review" in tasks
@@ -312,7 +312,7 @@ class TestCreateTask:
         )
         assert task["title"] == "Write code"
         assert task["step_id"] == steps[1]["id"]
-        assert task["step_name"] == "Design"
+        assert task["step_name"] == "Research"
         assert task["cancelled"] is False
         assert task["project_id"] == project_id
         assert task["parent_task_id"] is None

@@ -25,7 +25,10 @@ DEFAULT_CONFIG = {
     "default_model": "claude-sonnet-4-5",
     "default_workflow": [
         {"name": "Plan", "system_prompt_file": "agents/planner.md"},
+        {"name": "Research", "system_prompt_file": "agents/researcher.md"},
+        {"name": "Synthesize", "system_prompt_file": "agents/synthesizer.md"},
         {"name": "Implement", "system_prompt_file": "agents/coder.md"},
+        {"name": "Test", "system_prompt_file": "agents/tester.md"},
         {"name": "Review", "system_prompt_file": "agents/reviewer.md"},
         {"name": "Done"},
     ],
