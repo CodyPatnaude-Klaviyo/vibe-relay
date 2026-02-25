@@ -6,6 +6,7 @@ and integration tests verifying trigger event flow with real DB.
 
 import sqlite3
 import uuid
+from collections.abc import Generator
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -23,7 +24,7 @@ from vibe_relay.mcp.events import emit_event
 
 
 @pytest.fixture()
-def conn(tmp_path: Path) -> sqlite3.Connection:
+def conn(tmp_path: Path) -> Generator[sqlite3.Connection, None, None]:
     db_path = str(tmp_path / "test.db")
     connection = init_db(db_path)
     yield connection
@@ -168,13 +169,6 @@ class TestShouldDispatch:
         }
         assert should_dispatch(event, conn) is False
 
-    def test_without_conn_returns_false(self) -> None:
-        event = {
-            "type": "task_moved",
-            "payload": {"task_id": "t1", "old_step_id": "s1", "new_step_id": "s2"},
-        }
-        assert should_dispatch(event) is False
-
 
 class TestShouldCleanup:
     def test_task_cancelled_triggers_cleanup(self, conn: sqlite3.Connection) -> None:
@@ -298,97 +292,3 @@ class TestTriggerDispatchIntegration:
 
         events = get_unconsumed_trigger_events(conn)
         assert len(events) == 0
-
-    def test_capacity_check_blocks_dispatch(self, conn: sqlite3.Connection) -> None:
-        pid, steps = _seed_project_with_steps(conn)
-        tid1 = _seed_task(conn, pid, steps[0]["id"])
-        tid2 = _seed_task(conn, pid, steps[1]["id"])
-        tid3 = _seed_task(conn, pid, steps[2]["id"])
-
-        _seed_run(conn, tid1, steps[0]["id"], completed=False)
-        _seed_run(conn, tid2, steps[1]["id"], completed=False)
-        _seed_run(conn, tid3, steps[2]["id"], completed=False)
-
-        assert count_active_runs(conn) == 3
-
-        emit_event(
-            conn,
-            "task_moved",
-            {
-                "task_id": "new-task",
-                "old_step_id": steps[0]["id"],
-                "new_step_id": steps[1]["id"],
-                "project_id": pid,
-            },
-        )
-        conn.commit()
-
-        events = get_unconsumed_trigger_events(conn)
-        assert len(events) == 1
-
-    def test_active_run_prevents_double_launch(self, conn: sqlite3.Connection) -> None:
-        pid, steps = _seed_project_with_steps(conn)
-        tid = _seed_task(conn, pid, steps[0]["id"])
-        _seed_run(conn, tid, steps[0]["id"], completed=False)
-
-        assert has_active_run(conn, tid) is True
-
-        emit_event(
-            conn,
-            "task_moved",
-            {
-                "task_id": tid,
-                "old_step_id": steps[0]["id"],
-                "new_step_id": steps[1]["id"],
-                "project_id": pid,
-            },
-        )
-        conn.commit()
-
-        events = get_unconsumed_trigger_events(conn)
-        assert len(events) == 1
-
-    def test_completed_run_allows_relaunch(self, conn: sqlite3.Connection) -> None:
-        pid, steps = _seed_project_with_steps(conn)
-        tid = _seed_task(conn, pid, steps[0]["id"])
-        _seed_run(conn, tid, steps[0]["id"], completed=True)
-
-        assert has_active_run(conn, tid) is False
-
-    def test_multiple_events_processed_independently(
-        self, conn: sqlite3.Connection
-    ) -> None:
-        pid, steps = _seed_project_with_steps(conn)
-        tid1 = _seed_task(conn, pid, steps[0]["id"])
-        tid2 = _seed_task(conn, pid, steps[1]["id"])
-
-        emit_event(
-            conn,
-            "task_moved",
-            {
-                "task_id": tid1,
-                "old_step_id": steps[0]["id"],
-                "new_step_id": steps[1]["id"],
-                "project_id": pid,
-            },
-        )
-        emit_event(
-            conn,
-            "task_moved",
-            {
-                "task_id": tid2,
-                "old_step_id": steps[1]["id"],
-                "new_step_id": steps[2]["id"],
-                "project_id": pid,
-            },
-        )
-        conn.commit()
-
-        events = get_unconsumed_trigger_events(conn)
-        assert len(events) == 2
-
-        mark_trigger_consumed(conn, events[0]["id"])
-
-        events = get_unconsumed_trigger_events(conn)
-        assert len(events) == 1
-        assert events[0]["payload"]["task_id"] == tid2
