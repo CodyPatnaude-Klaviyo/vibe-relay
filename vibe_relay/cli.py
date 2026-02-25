@@ -1,9 +1,10 @@
 """CLI entry point for vibe-relay.
 
 Commands:
-    vibe-relay init   — scaffold config and agent prompts in current directory
-    vibe-relay serve  — start the API server (placeholder)
-    vibe-relay mcp    — start the MCP server (stdio transport)
+    vibe-relay init       — scaffold config and agent prompts in current directory
+    vibe-relay serve      — start the API server (placeholder)
+    vibe-relay mcp        — start the MCP server (stdio transport)
+    vibe-relay run-agent  — launch a Claude agent for a specific task
 """
 
 import json
@@ -81,7 +82,9 @@ def init() -> None:
             click.echo(f"  Copied {filename} -> {dest}")
         else:
             # Create a minimal placeholder if source doesn't exist
-            dest.write_text(f"# {filename.replace('.md', '').title()} Agent\n\nSystem prompt not yet configured.\n")
+            dest.write_text(
+                f"# {filename.replace('.md', '').title()} Agent\n\nSystem prompt not yet configured.\n"
+            )
             click.echo(f"  Created placeholder {dest}")
 
     click.echo("Done. Edit vibe-relay.config.json to set your repo_path.")
@@ -94,7 +97,9 @@ def serve() -> None:
 
 
 @main.command()
-@click.option("--task-id", default=None, help="Scope context-sensitive tools to this task")
+@click.option(
+    "--task-id", default=None, help="Scope context-sensitive tools to this task"
+)
 def mcp(task_id: str | None) -> None:
     """Start the vibe-relay MCP server (stdio transport)."""
     from vibe_relay.config import ConfigError, load_config
@@ -111,3 +116,35 @@ def mcp(task_id: str | None) -> None:
     from vibe_relay.mcp.server import run_server
 
     run_server(task_id=task_id, db_path=db_path)
+
+
+@main.command("run-agent")
+@click.option("--task-id", required=True, help="UUID of the task to run an agent for")
+def run_agent_cmd(task_id: str) -> None:
+    """Launch a Claude agent for a specific task."""
+    import sys
+
+    from vibe_relay.config import ConfigError, load_config
+
+    try:
+        config = load_config()
+    except ConfigError as e:
+        click.echo(f"Config error: {e}", err=True)
+        sys.exit(1)
+
+    from runner.launcher import LaunchError, launch_agent
+    from runner.worktree import WorktreeError
+
+    try:
+        result = launch_agent(task_id, config)
+    except (LaunchError, WorktreeError) as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+    click.echo(
+        f"Agent completed. session_id={result.session_id} exit_code={result.exit_code}"
+    )
+    if result.error:
+        click.echo(f"Error: {result.error}", err=True)
+
+    sys.exit(result.exit_code)
