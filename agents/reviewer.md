@@ -26,6 +26,10 @@ When the code is approved:
      git update-ref refs/heads/<base_branch> HEAD
      ```
      (Do NOT use `git push . HEAD:<base_branch>` — it fails from worktrees.)
+   - Push the updated base branch to the remote:
+     ```bash
+     git push origin <base_branch>
+     ```
    - Call `complete_task(task_id)` to mark the task done.
 
 3. **If there is a merge conflict**:
