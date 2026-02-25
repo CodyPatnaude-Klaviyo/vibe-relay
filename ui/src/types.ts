@@ -4,6 +4,8 @@ export interface Project {
   id: string;
   title: string;
   description: string | null;
+  repo_path: string | null;
+  base_branch: string | null;
   status: string;
   created_at: string;
   updated_at: string;
@@ -34,6 +36,7 @@ export interface Task {
   cancelled: boolean;
   type: TaskType;
   plan_approved: boolean;
+  has_active_run: boolean;
   output: string | null;
   branch: string | null;
   worktree_path: string | null;

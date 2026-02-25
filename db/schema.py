@@ -11,6 +11,8 @@ TABLES = {
             id          TEXT PRIMARY KEY,
             title       TEXT NOT NULL,
             description TEXT,
+            repo_path   TEXT,
+            base_branch TEXT,
             status      TEXT NOT NULL DEFAULT 'active',
             created_at  TEXT NOT NULL,
             updated_at  TEXT NOT NULL

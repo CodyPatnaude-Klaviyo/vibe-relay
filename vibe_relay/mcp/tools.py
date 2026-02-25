@@ -181,14 +181,31 @@ def create_project(
     conn: sqlite3.Connection,
     title: str,
     description: str = "",
+    repo_path: str | None = None,
+    base_branch: str | None = None,
 ) -> dict[str, Any]:
     """Create a new project."""
+    from pathlib import Path
+
+    from runner.git_utils import detect_default_branch, is_git_repo
+
+    # Validate and resolve repo_path if provided
+    resolved_repo: str | None = None
+    resolved_branch: str | None = base_branch
+    if repo_path:
+        p = Path(repo_path).expanduser().resolve()
+        if not is_git_repo(p):
+            return {"error": "invalid_input", "message": f"Not a git repository: {repo_path}"}
+        resolved_repo = str(p)
+        if not resolved_branch:
+            resolved_branch = detect_default_branch(p)
+
     project_id = _uuid()
     now = _now()
     conn.execute(
-        """INSERT INTO projects (id, title, description, status, created_at, updated_at)
-           VALUES (?, ?, ?, 'active', ?, ?)""",
-        (project_id, title, description, now, now),
+        """INSERT INTO projects (id, title, description, repo_path, base_branch, status, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, 'active', ?, ?)""",
+        (project_id, title, description, resolved_repo, resolved_branch, now, now),
     )
     emit_event(conn, "project_created", {"project_id": project_id})
     conn.commit()
@@ -197,6 +214,8 @@ def create_project(
         "id": project_id,
         "title": title,
         "description": description,
+        "repo_path": resolved_repo,
+        "base_branch": resolved_branch,
         "status": "active",
         "created_at": now,
         "updated_at": now,

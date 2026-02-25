@@ -82,8 +82,8 @@ def _resolve_workflow_steps(
             if ws.system_prompt:
                 step["system_prompt"] = ws.system_prompt
             elif ws.system_prompt_file:
-                # Read system prompt from file
-                repo_path = config.get("repo_path", ".") if config else "."
+                # Read system prompt from file — prefer project repo_path over config
+                repo_path = body.repo_path or (config.get("repo_path", ".") if config else ".")
                 prompt_path = Path(repo_path) / ws.system_prompt_file
                 if prompt_path.exists():
                     step["system_prompt"] = prompt_path.read_text()
@@ -142,7 +142,13 @@ def create_project_endpoint(
     conn: sqlite3.Connection = Depends(get_db),
 ) -> dict[str, Any]:
     """Create a new project with workflow steps and a root task at the first agent step."""
-    project = create_project(conn, title=body.title, description=body.description)
+    project = create_project(
+        conn,
+        title=body.title,
+        description=body.description,
+        repo_path=body.repo_path,
+        base_branch=body.base_branch,
+    )
     _check_error(project)
 
     # Create workflow steps
@@ -430,6 +436,38 @@ def delete_dependency(
     result = remove_dependency(conn, dependency_id)
     _check_error(result)
     return result
+
+
+# ── Repo validation + config endpoints ─────────────────────
+
+
+@router.get("/repos/validate")
+def validate_repo(path: str) -> dict[str, Any]:
+    """Validate a local path as a git repository and detect its default branch."""
+    from runner.git_utils import detect_default_branch, is_git_repo
+
+    resolved = Path(path).expanduser().resolve()
+    if not resolved.exists():
+        return {"valid": False, "error": f"Path does not exist: {path}"}
+    if not resolved.is_dir():
+        return {"valid": False, "error": f"Path is not a directory: {path}"}
+    if not is_git_repo(resolved):
+        return {"valid": False, "error": f"Not a git repository: {path}"}
+
+    return {
+        "valid": True,
+        "repo_path": str(resolved),
+        "default_branch": detect_default_branch(resolved),
+    }
+
+
+@router.get("/config/defaults")
+def get_config_defaults() -> dict[str, Any]:
+    """Return global config defaults for repo_path and base_branch."""
+    return {
+        "repo_path": _config.get("repo_path") if _config else None,
+        "base_branch": _config.get("base_branch") if _config else None,
+    }
 
 
 # ── WebSocket endpoint ─────────────────────────────────────

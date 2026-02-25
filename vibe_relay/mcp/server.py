@@ -58,9 +58,15 @@ def create_server() -> FastMCP:
     )
 
     @server.tool(description="Create a new project")
-    def create_project(title: str, description: str = "", ctx: Context = None) -> str:  # type: ignore[assignment]
+    def create_project(
+        title: str,
+        description: str = "",
+        repo_path: str | None = None,
+        base_branch: str | None = None,
+        ctx: Context = None,  # type: ignore[assignment]
+    ) -> str:
         conn = _get_conn(ctx)
-        result = tools.create_project(conn, title, description)
+        result = tools.create_project(conn, title, description, repo_path, base_branch)
         return json.dumps(result, indent=2)
 
     @server.tool(description="Create workflow steps for a project")

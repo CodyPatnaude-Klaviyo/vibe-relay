@@ -2,109 +2,169 @@ import type { Task } from "../types";
 import { StepBadge } from "./StepBadge";
 import { useBoardStore } from "../store/boardStore";
 
-function TypeIndicator({ type, planApproved }: { type: string; planApproved: boolean }) {
-  if (type === "milestone") {
-    return (
-      <span
-        style={{
-          fontSize: "11px",
-          fontWeight: 600,
-          padding: "1px 6px",
-          borderRadius: "var(--badge-radius)",
-          background: planApproved ? "rgba(34,197,94,0.15)" : "rgba(168,85,247,0.15)",
-          color: planApproved ? "var(--status-done)" : "#a855f7",
-          border: `1px solid ${planApproved ? "rgba(34,197,94,0.3)" : "rgba(168,85,247,0.3)"}`,
-        }}
-      >
-        {planApproved ? "Approved" : "Milestone"}
-      </span>
-    );
+function StatusBadge({ label, color }: { label: string; color: string }) {
+  const r = parseInt(color.slice(1, 3), 16);
+  const g = parseInt(color.slice(3, 5), 16);
+  const b = parseInt(color.slice(5, 7), 16);
+  return (
+    <span
+      style={{
+        fontSize: "10px",
+        fontWeight: 600,
+        padding: "2px 7px",
+        borderRadius: "var(--badge-radius)",
+        background: `rgba(${r}, ${g}, ${b}, 0.12)`,
+        color: color,
+        border: `1px solid rgba(${r}, ${g}, ${b}, 0.25)`,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "4px",
+        textTransform: "uppercase",
+        letterSpacing: "0.3px",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function RunningDot() {
+  return (
+    <span
+      style={{
+        width: "6px",
+        height: "6px",
+        borderRadius: "50%",
+        background: "var(--agent-active)",
+        display: "inline-block",
+        boxShadow: "0 0 6px var(--agent-active)",
+      }}
+    />
+  );
+}
+
+interface CardState {
+  borderLeft: string | undefined;
+  className: string;
+  opacity: number;
+  filter: string | undefined;
+}
+
+function getCardState(task: Task, isBlocked: boolean): CardState {
+  if (task.cancelled) {
+    return {
+      borderLeft: undefined,
+      className: "task-card",
+      opacity: 0.35,
+      filter: "grayscale(0.8)",
+    };
   }
-  if (type === "research") {
-    return (
-      <span
-        style={{
-          fontSize: "11px",
-          fontWeight: 600,
-          padding: "1px 6px",
-          borderRadius: "var(--badge-radius)",
-          background: "rgba(59,130,246,0.15)",
-          color: "#3b82f6",
-          border: "1px solid rgba(59,130,246,0.3)",
-        }}
-      >
-        Research
-      </span>
-    );
+  if (isBlocked) {
+    return {
+      borderLeft: undefined,
+      className: "task-card",
+      opacity: 0.5,
+      filter: undefined,
+    };
   }
-  return null;
+  if (task.has_active_run) {
+    return {
+      borderLeft: "3px solid var(--agent-active)",
+      className: "task-card task-card--agent-active",
+      opacity: 1,
+      filter: undefined,
+    };
+  }
+  if (task.type === "milestone" && !task.plan_approved) {
+    return {
+      borderLeft: "3px solid var(--needs-attention)",
+      className: "task-card task-card--needs-attention",
+      opacity: 1,
+      filter: undefined,
+    };
+  }
+  if (task.type === "milestone" && task.plan_approved) {
+    return {
+      borderLeft: "3px solid #22c55e",
+      className: "task-card",
+      opacity: 1,
+      filter: undefined,
+    };
+  }
+  return {
+    borderLeft: undefined,
+    className: "task-card",
+    opacity: 1,
+    filter: undefined,
+  };
 }
 
 export function TaskCard({ task, isBlocked }: { task: Task; isBlocked?: boolean }) {
   const selectTask = useBoardStore((s) => s.selectTask);
-
-  const isMilestone = task.type === "milestone";
-  const borderColor = isMilestone
-    ? task.plan_approved
-      ? "rgba(34,197,94,0.4)"
-      : "rgba(168,85,247,0.4)"
-    : "var(--border)";
+  const state = getCardState(task, isBlocked ?? false);
 
   return (
     <div
-      className="task-card"
+      className={state.className}
       onClick={() => selectTask(task.id)}
       style={{
         background: "var(--bg-surface)",
-        border: `1px solid ${borderColor}`,
-        borderLeft: isMilestone ? `3px solid ${borderColor}` : undefined,
+        border: "1px solid var(--glass-border)",
+        borderLeft: state.borderLeft,
         borderRadius: "var(--card-radius)",
         padding: "12px",
         cursor: "pointer",
         marginBottom: "8px",
-        opacity: task.cancelled ? 0.5 : isBlocked ? 0.6 : 1,
-        textDecoration: task.cancelled ? "line-through" : "none",
+        opacity: state.opacity,
+        filter: state.filter,
+        boxShadow: "0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.03)",
       }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
-      onMouseLeave={(e) => (e.currentTarget.style.background = "var(--bg-surface)")}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = "var(--bg-hover)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "var(--bg-surface)";
+      }}
     >
-      <div style={{ marginBottom: "8px", fontWeight: 500, fontSize: "14px" }}>
+      <div style={{ marginBottom: "8px", fontWeight: 500, fontSize: "13px", lineHeight: 1.4 }}>
         {task.title}
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
         <StepBadge name={task.step_name} position={task.step_position} />
-        <TypeIndicator type={task.type} planApproved={task.plan_approved} />
-        {isBlocked && (
-          <span
-            style={{
-              fontSize: "11px",
-              color: "var(--text-muted)",
-              fontStyle: "italic",
-            }}
-          >
-            blocked
+
+        {task.has_active_run && (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+            <RunningDot />
+            <StatusBadge label="Running" color="#3b82f6" />
           </span>
         )}
+
+        {!task.has_active_run && task.type === "milestone" && !task.plan_approved && !task.cancelled && (
+          <StatusBadge label="Needs Approval" color="#f59e0b" />
+        )}
+
+        {task.type === "milestone" && task.plan_approved && (
+          <StatusBadge label="Approved" color="#22c55e" />
+        )}
+
+        {isBlocked && !task.cancelled && (
+          <StatusBadge label="Blocked" color="#6b7280" />
+        )}
+
+        {task.type === "research" && (
+          <StatusBadge label="Research" color="#3b82f6" />
+        )}
+
         {task.type === "research" && task.output && (
-          <span
-            style={{
-              fontSize: "11px",
-              color: "var(--text-muted)",
-              maxWidth: "100px",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            has output
-          </span>
+          <span style={{ fontSize: "10px", color: "var(--text-dim)" }}>has output</span>
         )}
+
         {task.branch && (
           <span
             style={{
-              fontSize: "11px",
-              color: "var(--text-muted)",
-              maxWidth: "140px",
+              fontSize: "10px",
+              color: "var(--text-dim)",
+              maxWidth: "120px",
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",

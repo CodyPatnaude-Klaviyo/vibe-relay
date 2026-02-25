@@ -3,6 +3,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { BoardData, Dependency, WorkflowStep } from "../types";
 import { createTask } from "../api/tasks";
 import { TaskCard } from "./TaskCard";
+import { STEP_PALETTE, withAlpha } from "../utils/colors";
+
+function getStepColor(step: WorkflowStep): string {
+  return step.color ?? STEP_PALETTE[step.position % STEP_PALETTE.length];
+}
 
 function NewTaskForm({
   projectId,
@@ -35,14 +40,15 @@ function NewTaskForm({
     <form
       onSubmit={handleSubmit}
       style={{
-        background: "var(--card-bg)",
-        border: "1px solid var(--border)",
+        background: "var(--glass-bg)",
+        border: "1px solid var(--glass-border)",
         borderRadius: "var(--card-radius)",
         padding: "10px 12px",
         marginBottom: "8px",
         display: "flex",
         flexDirection: "column",
         gap: "8px",
+        backdropFilter: "blur(8px)",
       }}
     >
       <input
@@ -61,7 +67,10 @@ function NewTaskForm({
           fontFamily: "inherit",
           width: "100%",
           boxSizing: "border-box",
+          outline: "none",
         }}
+        onFocus={(e) => (e.currentTarget.style.borderColor = "var(--agent-active)")}
+        onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
       />
       <textarea
         value={description}
@@ -79,7 +88,10 @@ function NewTaskForm({
           resize: "vertical",
           width: "100%",
           boxSizing: "border-box",
+          outline: "none",
         }}
+        onFocus={(e) => (e.currentTarget.style.borderColor = "var(--agent-active)")}
+        onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
       />
       <div style={{ display: "flex", gap: "6px", justifyContent: "flex-end" }}>
         <button
@@ -175,7 +187,7 @@ export function Board({ data, projectId }: { data: BoardData; projectId: string 
     <div
       style={{
         display: "flex",
-        gap: "16px",
+        gap: "12px",
         padding: "16px",
         overflowX: "auto",
         height: "calc(100vh - 80px)",
@@ -183,6 +195,7 @@ export function Board({ data, projectId }: { data: BoardData; projectId: string 
     >
       {columns.map((col) => {
         const tasks = data.tasks[col.id] ?? [];
+        const stepColor = getStepColor(col);
         return (
           <div
             key={col.key}
@@ -191,20 +204,28 @@ export function Board({ data, projectId }: { data: BoardData; projectId: string 
               width: "var(--column-width)",
               display: "flex",
               flexDirection: "column",
+              background: "var(--border-subtle)",
+              borderRadius: "12px",
+              padding: "0 0 8px",
+              overflow: "hidden",
             }}
           >
+            {/* Column header */}
             <div
               style={{
-                padding: "8px 12px",
+                padding: "10px 12px",
                 fontWeight: 600,
-                fontSize: "13px",
+                fontSize: "12px",
                 textTransform: "uppercase",
                 letterSpacing: "0.5px",
                 color: "var(--text-muted)",
-                marginBottom: "8px",
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
+                background: "var(--glass-bg)",
+                backdropFilter: "blur(8px)",
+                borderBottom: `2px solid ${withAlpha(stepColor, 0.4)}`,
+                boxShadow: `0 2px 8px ${withAlpha(stepColor, 0.08)}`,
               }}
             >
               <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -218,30 +239,54 @@ export function Board({ data, projectId }: { data: BoardData; projectId: string 
                       borderRadius: "50%",
                       background: "var(--ws-connected)",
                       display: "inline-block",
+                      boxShadow: "0 0 4px var(--ws-connected)",
                     }}
                   />
                 )}
               </span>
               <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <span>{tasks.length}</span>
+                <span
+                  style={{
+                    background: withAlpha(stepColor, 0.15),
+                    color: stepColor,
+                    padding: "1px 7px",
+                    borderRadius: "10px",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    minWidth: "20px",
+                    textAlign: "center",
+                  }}
+                >
+                  {tasks.length}
+                </span>
                 <button
                   onClick={() => setAddingToStep(addingToStep === col.id ? null : col.id)}
                   title={`Add task to ${col.name}`}
                   style={{
                     background: "none",
-                    border: "none",
+                    border: "1px solid transparent",
                     color: "var(--text-muted)",
                     fontSize: "16px",
                     cursor: "pointer",
-                    padding: "0 2px",
+                    padding: "0 4px",
                     lineHeight: 1,
+                    borderRadius: "var(--badge-radius)",
+                    transition: "border-color 0.15s ease, color 0.15s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = "var(--border)";
+                    e.currentTarget.style.color = "var(--text)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = "transparent";
+                    e.currentTarget.style.color = "var(--text-muted)";
                   }}
                 >
                   +
                 </button>
               </span>
             </div>
-            <div style={{ flex: 1, overflowY: "auto" }}>
+            <div style={{ flex: 1, overflowY: "auto", padding: "8px 8px 0" }}>
               {addingToStep === col.id && (
                 <NewTaskForm
                   projectId={projectId}
@@ -252,14 +297,17 @@ export function Board({ data, projectId }: { data: BoardData; projectId: string 
               {tasks.length === 0 && addingToStep !== col.id ? (
                 <div
                   style={{
-                    color: "var(--text-muted)",
-                    fontSize: "13px",
-                    padding: "16px",
+                    color: "var(--text-dim)",
+                    fontSize: "12px",
+                    padding: "24px 16px",
                     textAlign: "center",
                     fontStyle: "italic",
+                    border: "1px dashed var(--border)",
+                    borderRadius: "var(--card-radius)",
+                    margin: "4px 0",
                   }}
                 >
-                  Nothing here yet
+                  No tasks yet
                 </div>
               ) : (
                 tasks.map((task) => (
@@ -283,25 +331,43 @@ export function Board({ data, projectId }: { data: BoardData; projectId: string 
             width: "var(--column-width)",
             display: "flex",
             flexDirection: "column",
+            background: "var(--border-subtle)",
+            borderRadius: "12px",
+            padding: "0 0 8px",
+            overflow: "hidden",
           }}
         >
           <div
             style={{
-              padding: "8px 12px",
+              padding: "10px 12px",
               fontWeight: 600,
-              fontSize: "13px",
+              fontSize: "12px",
               textTransform: "uppercase",
               letterSpacing: "0.5px",
               color: "var(--status-cancelled)",
-              marginBottom: "8px",
               display: "flex",
               justifyContent: "space-between",
+              alignItems: "center",
+              background: "var(--glass-bg)",
+              backdropFilter: "blur(8px)",
+              borderBottom: "2px solid rgba(239, 68, 68, 0.3)",
             }}
           >
             <span>Cancelled</span>
-            <span>{data.cancelled.length}</span>
+            <span
+              style={{
+                background: "rgba(239, 68, 68, 0.15)",
+                color: "var(--status-cancelled)",
+                padding: "1px 7px",
+                borderRadius: "10px",
+                fontSize: "11px",
+                fontWeight: 600,
+              }}
+            >
+              {data.cancelled.length}
+            </span>
           </div>
-          <div style={{ flex: 1, overflowY: "auto" }}>
+          <div style={{ flex: 1, overflowY: "auto", padding: "8px 8px 0" }}>
             {data.cancelled.map((task) => (
               <TaskCard key={task.id} task={task} />
             ))}

@@ -127,7 +127,11 @@ def get_tasks_grouped_by_step(
     rows = conn.execute(
         """SELECT t.*,
                   ws.name as step_name,
-                  ws.position as step_position
+                  ws.position as step_position,
+                  EXISTS(
+                      SELECT 1 FROM agent_runs ar
+                      WHERE ar.task_id = t.id AND ar.completed_at IS NULL
+                  ) as has_active_run
            FROM tasks t
            JOIN workflow_steps ws ON t.step_id = ws.id
            WHERE t.project_id = ?
@@ -139,6 +143,7 @@ def get_tasks_grouped_by_step(
         task = dict(row)
         task["cancelled"] = bool(task["cancelled"])
         task["plan_approved"] = bool(task.get("plan_approved", 0))
+        task["has_active_run"] = bool(task.get("has_active_run", 0))
         if task["cancelled"]:
             cancelled.append(task)
         else:
@@ -194,7 +199,11 @@ def enrich_event_payload(
             task = conn.execute(
                 """SELECT t.*,
                           ws.name as step_name,
-                          ws.position as step_position
+                          ws.position as step_position,
+                          EXISTS(
+                              SELECT 1 FROM agent_runs ar
+                              WHERE ar.task_id = t.id AND ar.completed_at IS NULL
+                          ) as has_active_run
                    FROM tasks t
                    JOIN workflow_steps ws ON t.step_id = ws.id
                    WHERE t.id = ?""",
@@ -203,6 +212,7 @@ def enrich_event_payload(
             if task:
                 task_dict = dict(task)
                 task_dict["cancelled"] = bool(task_dict["cancelled"])
+                task_dict["has_active_run"] = bool(task_dict.get("has_active_run", 0))
                 return {"type": event_type, "payload": task_dict}
 
     elif event_type == "comment_added":

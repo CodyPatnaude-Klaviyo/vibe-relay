@@ -264,11 +264,13 @@ async def process_triggers(db_path: str, config: dict[str, Any]) -> None:
 
                         elif should_cleanup(event, conn):
                             task = conn.execute(
-                                "SELECT worktree_path FROM tasks WHERE id = ?",
+                                """SELECT t.worktree_path, p.repo_path as project_repo_path
+                                   FROM tasks t JOIN projects p ON t.project_id = p.id
+                                   WHERE t.id = ?""",
                                 (task_id,),
                             ).fetchone()
                             if task and task["worktree_path"]:
-                                repo_path = config.get("repo_path", "")
+                                repo_path = task["project_repo_path"] or config.get("repo_path", "")
                                 asyncio.create_task(
                                     _cleanup_worktree_in_thread(
                                         task_id, task["worktree_path"], repo_path
@@ -281,11 +283,13 @@ async def process_triggers(db_path: str, config: dict[str, Any]) -> None:
                     elif event["type"] == "task_cancelled":
                         if task_id:
                             task = conn.execute(
-                                "SELECT worktree_path FROM tasks WHERE id = ?",
+                                """SELECT t.worktree_path, p.repo_path as project_repo_path
+                                   FROM tasks t JOIN projects p ON t.project_id = p.id
+                                   WHERE t.id = ?""",
                                 (task_id,),
                             ).fetchone()
                             if task and task["worktree_path"]:
-                                repo_path = config.get("repo_path", "")
+                                repo_path = task["project_repo_path"] or config.get("repo_path", "")
                                 asyncio.create_task(
                                     _cleanup_worktree_in_thread(
                                         task_id, task["worktree_path"], repo_path

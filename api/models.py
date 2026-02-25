@@ -17,6 +17,8 @@ class WorkflowStepInput(BaseModel):
 class CreateProjectRequest(BaseModel):
     title: str
     description: str = ""
+    repo_path: str | None = None
+    base_branch: str | None = None
     workflow_steps: list[WorkflowStepInput] | None = None
 
 
@@ -52,6 +54,8 @@ class ProjectResponse(BaseModel):
     id: str
     title: str
     description: str | None = None
+    repo_path: str | None = None
+    base_branch: str | None = None
     status: str
     created_at: str
     updated_at: str
@@ -82,6 +86,7 @@ class TaskResponse(BaseModel):
     cancelled: bool
     type: str = "task"
     plan_approved: bool = False
+    has_active_run: bool = False
     output: str | None = None
     branch: str | None = None
     worktree_path: str | None = None

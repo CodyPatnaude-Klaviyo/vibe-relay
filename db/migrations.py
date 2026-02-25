@@ -40,11 +40,30 @@ def run_migrations(conn: sqlite3.Connection) -> None:
     except sqlite3.OperationalError:
         pass  # Column already exists
 
+    # Migration: add repo_path and base_branch to projects
+    _migrate_add_project_repo_columns(conn)
+
     # Migration: transition from phase/status to step_id/cancelled (Phase 7)
     _migrate_to_workflow_steps(conn)
 
     # Migration: add type, plan_approved, output columns to tasks (Phase 7 SDLC)
     _migrate_add_task_sdlc_columns(conn)
+
+
+def _migrate_add_project_repo_columns(conn: sqlite3.Connection) -> None:
+    """Add repo_path and base_branch columns to projects table.
+
+    Idempotent — silently skips if columns already exist.
+    """
+    for stmt in [
+        "ALTER TABLE projects ADD COLUMN repo_path TEXT",
+        "ALTER TABLE projects ADD COLUMN base_branch TEXT",
+    ]:
+        try:
+            conn.execute(stmt)
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # Column already exists
 
 
 def _migrate_to_workflow_steps(conn: sqlite3.Connection) -> None:
