@@ -49,7 +49,7 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for full detail.
 | **Reviewer** | Task moves to `in_review` | Reviews PR, merges or sends back with comments |
 | **Orchestrator** | All sibling tasks reach `done` | Reviews project state, runs completion check, creates more tasks or closes project |
 
-See [AGENTS.md](./AGENTS.md) for system prompts and configuration.
+See [AGENTROLES.md](./AGENTROLES.md) for system prompts and configuration.
 
 ---
 
@@ -155,7 +155,7 @@ Create a `vibe-relay.config.json` in your project root:
 }
 ```
 
-System prompts can be customized per project. See [AGENTS.md](./AGENTS.md) for the defaults and guidance on writing effective prompts for each role.
+System prompts can be customized per project. See [AGENTROLES.md](./AGENTROLES.md) for the defaults and guidance on writing effective prompts for each role.
 
 ---
 

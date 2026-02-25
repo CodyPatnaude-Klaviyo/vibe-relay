@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: Foundation"
-status: not started
+status: complete
 ---
 
 # Phase 1: Foundation
@@ -45,7 +45,7 @@ vibe-relay/
 ├── pyproject.toml
 ├── README.md
 ├── ARCHITECTURE.md
-└── AGENTS.md
+└── AGENTROLES.md
 ```
 
 ### Database schema
@@ -99,7 +99,7 @@ Optional fields with defaults:
 
 ### Default agent prompts
 
-Copy the four system prompts from AGENTS.md into `agents/planner.md`, `agents/coder.md`, `agents/reviewer.md`, `agents/orchestrator.md`. These are the defaults that `vibe-relay init` copies into new projects.
+Copy the four system prompts from AGENTROLES.md into `agents/planner.md`, `agents/coder.md`, `agents/reviewer.md`, `agents/orchestrator.md`. These are the defaults that `vibe-relay init` copies into new projects.
 
 ### pyproject.toml
 
@@ -133,16 +133,16 @@ vibe-relay = "vibe_relay.cli:main"
 
 ## Acceptance criteria
 
-- [ ] `pip install -e .` completes without errors
-- [ ] `vibe-relay init` creates a valid `vibe-relay.config.json` and `agents/` directory
-- [ ] `vibe-relay serve` exits cleanly with a placeholder message
-- [ ] `vibe-relay mcp` exits cleanly with a placeholder message
-- [ ] Running `db/migrations.py` against an empty SQLite file creates all tables with correct columns
-- [ ] Re-running migrations is idempotent (no errors if tables already exist)
-- [ ] WAL mode is confirmed enabled after DB initialization
-- [ ] Config loader raises a descriptive error for missing `repo_path`
-- [ ] Config loader expands `~` in path fields
-- [ ] `tests/test_db.py` passes: creates DB, inserts a project and task, reads them back, verifies foreign key constraint on task→project
+- [x] `pip install -e .` completes without errors
+- [x] `vibe-relay init` creates a valid `vibe-relay.config.json` and `agents/` directory
+- [x] `vibe-relay serve` exits cleanly with a placeholder message
+- [x] `vibe-relay mcp` exits cleanly with a placeholder message
+- [x] Running `db/migrations.py` against an empty SQLite file creates all tables with correct columns
+- [x] Re-running migrations is idempotent (no errors if tables already exist)
+- [x] WAL mode is confirmed enabled after DB initialization
+- [x] Config loader raises a descriptive error for missing `repo_path`
+- [x] Config loader expands `~` in path fields
+- [x] `tests/test_db.py` passes: creates DB, inserts a project and task, reads them back, verifies foreign key constraint on task→project
 
 ---
 

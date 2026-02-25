@@ -1,0 +1,14 @@
+{
+  "repo_path": "/absolute/path/to/repo",
+  "base_branch": "main",
+  "worktrees_path": "~/.vibe-relay/worktrees",
+  "db_path": "~/.vibe-relay/vibe-relay.db",
+  "max_parallel_agents": 3,
+  "port_range": [4000, 4099],
+  "agents": {
+    "planner":      { "model": "claude-opus-4-5",   "system_prompt_file": "agents/planner.md" },
+    "coder":        { "model": "claude-sonnet-4-5", "system_prompt_file": "agents/coder.md" },
+    "reviewer":     { "model": "claude-sonnet-4-5", "system_prompt_file": "agents/reviewer.md" },
+    "orchestrator": { "model": "claude-opus-4-5",   "system_prompt_file": "agents/orchestrator.md" }
+  }
+}
