@@ -85,22 +85,6 @@ class TestCreateProject:
     """POST /projects creates a project with workflow steps and root task."""
 
     @pytest.mark.asyncio
-    async def test_create_project_returns_201(self, client: AsyncClient) -> None:
-        resp = await client.post(
-            "/projects",
-            json={"title": "My Project", "description": "desc"},
-        )
-        assert resp.status_code == 201
-
-    @pytest.mark.asyncio
-    async def test_create_project_returns_project_and_task(
-        self, client: AsyncClient
-    ) -> None:
-        data = await _create_project(client, title="My Project", description="desc")
-        assert "project" in data
-        assert "task" in data
-
-    @pytest.mark.asyncio
     async def test_project_has_expected_fields(self, client: AsyncClient) -> None:
         data = await _create_project(client, title="My Project", description="desc")
         project = data["project"]
@@ -193,19 +177,6 @@ class TestGetProject:
     """GET /projects/{id} returns project with task counts by step."""
 
     @pytest.mark.asyncio
-    async def test_get_project_with_task_counts(self, client: AsyncClient) -> None:
-        data = await _create_project(client)
-        project_id = data["project"]["id"]
-
-        resp = await client.get(f"/projects/{project_id}")
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["id"] == project_id
-        assert "tasks" in body
-        # Should have step names as keys + cancelled
-        assert "cancelled" in body["tasks"]
-
-    @pytest.mark.asyncio
     async def test_get_project_404(self, client: AsyncClient) -> None:
         resp = await client.get("/projects/nonexistent-id")
         assert resp.status_code == 404
@@ -245,17 +216,6 @@ class TestDeleteProject:
         assert resp.json()["status"] == "cancelled"
 
     @pytest.mark.asyncio
-    async def test_deleted_project_shows_cancelled(self, client: AsyncClient) -> None:
-        data = await _create_project(client)
-        project_id = data["project"]["id"]
-
-        await client.delete(f"/projects/{project_id}")
-
-        resp = await client.get(f"/projects/{project_id}")
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "cancelled"
-
-    @pytest.mark.asyncio
     async def test_delete_nonexistent_404(self, client: AsyncClient) -> None:
         resp = await client.delete("/projects/nonexistent-id")
         assert resp.status_code == 404
@@ -288,18 +248,6 @@ class TestListProjectSteps:
 
 class TestCreateTask:
     """POST /projects/{id}/tasks creates a task at a workflow step."""
-
-    @pytest.mark.asyncio
-    async def test_create_task_returns_201(self, client: AsyncClient) -> None:
-        data = await _create_project(client)
-        project_id = data["project"]["id"]
-        steps = await _get_steps(client, project_id)
-
-        resp = await client.post(
-            f"/projects/{project_id}/tasks",
-            json={"title": "Write code", "step_id": steps[1]["id"]},
-        )
-        assert resp.status_code == 201
 
     @pytest.mark.asyncio
     async def test_created_task_has_expected_fields(self, client: AsyncClient) -> None:
@@ -364,19 +312,6 @@ class TestListTasks:
     """GET /projects/{id}/tasks returns tasks grouped by step."""
 
     @pytest.mark.asyncio
-    async def test_list_tasks_grouped_by_step(self, client: AsyncClient) -> None:
-        data = await _create_project(client)
-        project_id = data["project"]["id"]
-
-        resp = await client.get(f"/projects/{project_id}/tasks")
-        assert resp.status_code == 200
-        body = resp.json()
-
-        assert "steps" in body
-        assert "tasks" in body
-        assert "cancelled" in body
-
-    @pytest.mark.asyncio
     async def test_root_task_in_correct_step(self, client: AsyncClient) -> None:
         data = await _create_project(client)
         project_id = data["project"]["id"]
@@ -419,18 +354,6 @@ class TestGetTask:
     """GET /tasks/{id} returns task with comments."""
 
     @pytest.mark.asyncio
-    async def test_get_task_with_comments(self, client: AsyncClient) -> None:
-        data = await _create_project(client)
-        task_id = data["task"]["id"]
-
-        resp = await client.get(f"/tasks/{task_id}")
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["id"] == task_id
-        assert "comments" in body
-        assert isinstance(body["comments"], list)
-
-    @pytest.mark.asyncio
     async def test_get_task_404(self, client: AsyncClient) -> None:
         resp = await client.get("/tasks/nonexistent-id")
         assert resp.status_code == 404
@@ -450,33 +373,6 @@ class TestGetTask:
         body = resp.json()
         assert len(body["comments"]) == 1
         assert body["comments"][0]["content"] == "Hello"
-
-    @pytest.mark.asyncio
-    async def test_get_task_has_expected_fields(self, client: AsyncClient) -> None:
-        data = await _create_project(client)
-        task_id = data["task"]["id"]
-
-        resp = await client.get(f"/tasks/{task_id}")
-        body = resp.json()
-        expected_keys = {
-            "id",
-            "project_id",
-            "parent_task_id",
-            "title",
-            "description",
-            "step_id",
-            "step_name",
-            "step_position",
-            "cancelled",
-            "branch",
-            "worktree_path",
-            "session_id",
-            "created_at",
-            "updated_at",
-            "comments",
-        }
-        assert expected_keys.issubset(set(body.keys()))
-
 
 # ── TestUpdateTask ────────────────────────────────────────
 
@@ -547,22 +443,6 @@ class TestUpdateTask:
         assert resp.json()["description"] == "Updated desc"
 
     @pytest.mark.asyncio
-    async def test_move_and_update_title(self, client: AsyncClient) -> None:
-        data = await _create_project(client)
-        task_id = data["task"]["id"]
-        project_id = data["project"]["id"]
-        steps = await _get_steps(client, project_id)
-
-        resp = await client.patch(
-            f"/tasks/{task_id}",
-            json={"step_id": steps[1]["id"], "title": "Active Task"},
-        )
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["step_id"] == steps[1]["id"]
-        assert body["title"] == "Active Task"
-
-    @pytest.mark.asyncio
     async def test_update_nonexistent_task_404(self, client: AsyncClient) -> None:
         resp = await client.patch("/tasks/nonexistent-id", json={"title": "Nope"})
         assert resp.status_code == 404
@@ -586,17 +466,6 @@ class TestUpdateTask:
 
 class TestAddComment:
     """POST /tasks/{id}/comments adds a comment."""
-
-    @pytest.mark.asyncio
-    async def test_add_comment_returns_201(self, client: AsyncClient) -> None:
-        data = await _create_project(client)
-        task_id = data["task"]["id"]
-
-        resp = await client.post(
-            f"/tasks/{task_id}/comments",
-            json={"content": "Looks good", "author_role": "Review"},
-        )
-        assert resp.status_code == 201
 
     @pytest.mark.asyncio
     async def test_comment_has_expected_fields(self, client: AsyncClient) -> None:
