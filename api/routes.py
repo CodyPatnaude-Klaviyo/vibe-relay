@@ -19,11 +19,13 @@ from api.deps import (
     get_tasks_grouped_by_step,
 )
 from api.models import (
+    AddDependencyRequest,
     AgentRunResponse,
     CommentResponse,
     CreateCommentRequest,
     CreateProjectRequest,
     CreateTaskRequest,
+    DependencyResponse,
     ProjectDetailResponse,
     ProjectResponse,
     TaskDetailResponse,
@@ -35,13 +37,18 @@ from api.ws import manager
 from vibe_relay.mcp.events import emit_event
 from vibe_relay.mcp.tools import (
     add_comment,
+    add_dependency,
+    approve_plan,
     cancel_task,
     create_project,
     create_task,
     create_workflow_steps,
+    get_dependencies,
     get_task,
     get_workflow_steps,
     move_task,
+    remove_dependency,
+    set_task_output,
     uncancel_task,
 )
 
@@ -75,8 +82,8 @@ def _resolve_workflow_steps(
             if ws.system_prompt:
                 step["system_prompt"] = ws.system_prompt
             elif ws.system_prompt_file:
-                # Read system prompt from file
-                repo_path = config.get("repo_path", ".") if config else "."
+                # Read system prompt from file — prefer project repo_path over config
+                repo_path = body.repo_path or (config.get("repo_path", ".") if config else ".")
                 prompt_path = Path(repo_path) / ws.system_prompt_file
                 if prompt_path.exists():
                     step["system_prompt"] = prompt_path.read_text()
@@ -104,10 +111,13 @@ def _resolve_workflow_steps(
             steps.append(step)
         return steps
 
-    # Bare minimum: Plan, Implement, Review, Done
+    # Default 7-step SDLC workflow
     return [
         {"name": "Plan"},
+        {"name": "Design"},
+        {"name": "Backlog"},
         {"name": "Implement"},
+        {"name": "Test"},
         {"name": "Review"},
         {"name": "Done"},
     ]
@@ -132,7 +142,13 @@ def create_project_endpoint(
     conn: sqlite3.Connection = Depends(get_db),
 ) -> dict[str, Any]:
     """Create a new project with workflow steps and a root task at the first agent step."""
-    project = create_project(conn, title=body.title, description=body.description)
+    project = create_project(
+        conn,
+        title=body.title,
+        description=body.description,
+        repo_path=body.repo_path,
+        base_branch=body.base_branch,
+    )
     _check_error(project)
 
     # Create workflow steps
@@ -151,13 +167,14 @@ def create_project_endpoint(
     if first_agent_step is None:
         first_agent_step = steps_result["steps"][0]
 
-    # Create root task at the first agent step
+    # Create root milestone at the first agent step (Plan)
     root_task = create_task(
         conn,
         title=f"Plan: {body.title}",
         description=body.description,
         step_id=first_agent_step["id"],
         project_id=project["id"],
+        task_type="milestone",
     )
     _check_error(root_task)
 
@@ -292,6 +309,11 @@ def update_task_endpoint(
             result = uncancel_task(conn, task_id)
         _check_error(result)
 
+    # Handle output update
+    if body.output is not None:
+        result = set_task_output(conn, task_id, body.output)
+        _check_error(result)
+
     # Handle title/description updates via direct SQL
     if body.title is not None or body.description is not None:
         task = conn.execute("SELECT id FROM tasks WHERE id = ?", (task_id,)).fetchone()
@@ -361,6 +383,91 @@ def list_task_runs(
         raise HTTPException(status_code=404, detail=f"Task '{task_id}' not found")
 
     return get_agent_runs(conn, task_id)
+
+
+# ── Approval endpoint ──────────────────────────────────────
+
+
+@router.post("/tasks/{task_id}/approve", response_model=TaskResponse)
+def approve_plan_endpoint(
+    task_id: str,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> dict[str, Any]:
+    """Approve a milestone's plan, enabling its child tasks to be dispatched."""
+    result = approve_plan(conn, task_id)
+    _check_error(result)
+    return result
+
+
+# ── Dependency endpoints ──────────────────────────────────
+
+
+@router.get("/tasks/{task_id}/dependencies")
+def get_task_dependencies(
+    task_id: str,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> dict[str, Any]:
+    """Get predecessors and successors for a task."""
+    result = get_dependencies(conn, task_id)
+    _check_error(result)
+    return result
+
+
+@router.post(
+    "/tasks/{task_id}/dependencies", status_code=201, response_model=DependencyResponse
+)
+def add_task_dependency(
+    task_id: str,
+    body: AddDependencyRequest,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> dict[str, Any]:
+    """Add a dependency for a task."""
+    result = add_dependency(conn, body.predecessor_id, body.successor_id)
+    _check_error(result)
+    return result
+
+
+@router.delete("/dependencies/{dependency_id}")
+def delete_dependency(
+    dependency_id: str,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> dict[str, Any]:
+    """Remove a dependency edge."""
+    result = remove_dependency(conn, dependency_id)
+    _check_error(result)
+    return result
+
+
+# ── Repo validation + config endpoints ─────────────────────
+
+
+@router.get("/repos/validate")
+def validate_repo(path: str) -> dict[str, Any]:
+    """Validate a local path as a git repository and detect its default branch."""
+    from runner.git_utils import detect_default_branch, is_git_repo
+
+    resolved = Path(path).expanduser().resolve()
+    if not resolved.exists():
+        return {"valid": False, "error": f"Path does not exist: {path}"}
+    if not resolved.is_dir():
+        return {"valid": False, "error": f"Path is not a directory: {path}"}
+    if not is_git_repo(resolved):
+        return {"valid": False, "error": f"Not a git repository: {path}"}
+
+    return {
+        "valid": True,
+        "repo_path": str(resolved),
+        "default_branch": detect_default_branch(resolved),
+    }
+
+
+@router.get("/config/defaults")
+def get_config_defaults() -> dict[str, Any]:
+    """Return global config defaults for repo_path and base_branch."""
+    return {
+        "repo_path": _config.get("repo_path") if _config else None,
+        "base_branch": _config.get("base_branch") if _config else None,
+    }
 
 
 # ── WebSocket endpoint ─────────────────────────────────────

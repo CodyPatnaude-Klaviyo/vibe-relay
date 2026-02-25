@@ -15,8 +15,17 @@ export function ProjectList() {
   });
 
   const createMutation = useMutation({
-    mutationFn: ({ title, description }: { title: string; description: string }) =>
-      createProject(title, description),
+    mutationFn: ({
+      title,
+      description,
+      repoPath,
+      baseBranch,
+    }: {
+      title: string;
+      description: string;
+      repoPath?: string | null;
+      baseBranch?: string | null;
+    }) => createProject(title, description, repoPath, baseBranch),
     onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ["projects"] });
       setShowModal(false);
@@ -25,17 +34,17 @@ export function ProjectList() {
   });
 
   return (
-    <div style={{ maxWidth: "800px", margin: "0 auto", padding: "32px 24px" }}>
+    <div style={{ maxWidth: "800px", margin: "0 auto", padding: "40px 24px" }}>
       {/* Header */}
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          marginBottom: "32px",
+          marginBottom: "36px",
         }}
       >
-        <h1 style={{ fontSize: "24px", fontWeight: 700 }}>Projects</h1>
+        <h1 style={{ fontSize: "28px", fontWeight: 700, letterSpacing: "-0.5px" }}>Projects</h1>
         <button
           onClick={() => setShowModal(true)}
           style={{
@@ -47,6 +56,16 @@ export function ProjectList() {
             fontSize: "14px",
             fontWeight: 600,
             cursor: "pointer",
+            boxShadow: "0 0 12px rgba(59,130,246,0.25)",
+            transition: "box-shadow 0.2s ease, transform 0.15s ease",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.boxShadow = "0 0 20px rgba(59,130,246,0.4)";
+            e.currentTarget.style.transform = "translateY(-1px)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.boxShadow = "0 0 12px rgba(59,130,246,0.25)";
+            e.currentTarget.style.transform = "translateY(0)";
           }}
         >
           New Project
@@ -64,7 +83,7 @@ export function ProjectList() {
       {!isLoading && projects && projects.length === 0 && (
         <div
           style={{
-            color: "var(--text-muted)",
+            color: "var(--text-dim)",
             textAlign: "center",
             padding: "48px 0",
             fontSize: "15px",
@@ -77,20 +96,30 @@ export function ProjectList() {
 
       {/* Project list */}
       {projects && projects.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
           {projects.map((project) => (
             <div
               key={project.id}
               onClick={() => navigate(`/projects/${project.id}`)}
               style={{
                 background: "var(--bg-surface)",
-                border: "1px solid var(--border)",
+                border: "1px solid var(--glass-border)",
                 borderRadius: "var(--card-radius)",
                 padding: "16px 20px",
                 cursor: "pointer",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                transition: "transform 0.15s ease, box-shadow 0.2s ease, border-color 0.2s ease",
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "var(--bg-surface)")}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "translateY(-2px)";
+                e.currentTarget.style.boxShadow = "0 6px 20px rgba(0,0,0,0.25)";
+                e.currentTarget.style.borderColor = "rgba(59,130,246,0.15)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.15)";
+                e.currentTarget.style.borderColor = "var(--glass-border)";
+              }}
             >
               <div
                 style={{
@@ -103,9 +132,9 @@ export function ProjectList() {
                 <span style={{ fontSize: "16px", fontWeight: 600 }}>{project.title}</span>
                 <span
                   style={{
-                    background: project.status === "active" ? "var(--status-done)22" : "var(--status-cancelled)22",
+                    background: project.status === "active" ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
                     color: project.status === "active" ? "var(--status-done)" : "var(--status-cancelled)",
-                    border: `1px solid ${project.status === "active" ? "var(--status-done)44" : "var(--status-cancelled)44"}`,
+                    border: `1px solid ${project.status === "active" ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.25)"}`,
                     padding: "2px 8px",
                     borderRadius: "var(--badge-radius)",
                     fontSize: "11px",
@@ -137,7 +166,9 @@ export function ProjectList() {
       {/* New Project Modal */}
       {showModal && (
         <NewProjectModal
-          onSubmit={(title, description) => createMutation.mutate({ title, description })}
+          onSubmit={(title, description, repoPath, baseBranch) =>
+            createMutation.mutate({ title, description, repoPath, baseBranch })
+          }
           onClose={() => setShowModal(false)}
           isSubmitting={createMutation.isPending}
         />

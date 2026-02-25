@@ -51,6 +51,7 @@ class TestMigrations:
             "events",
             "ports",
             "projects",
+            "task_dependencies",
             "tasks",
             "workflow_steps",
         ]
@@ -76,6 +77,7 @@ class TestMigrations:
             "events",
             "ports",
             "projects",
+            "task_dependencies",
             "tasks",
             "workflow_steps",
         ]
@@ -225,6 +227,9 @@ class TestTaskColumns:
             "description",
             "step_id",
             "cancelled",
+            "type",
+            "plan_approved",
+            "output",
             "worktree_path",
             "branch",
             "session_id",
@@ -236,7 +241,7 @@ class TestTaskColumns:
     def test_project_has_all_columns(self, conn: sqlite3.Connection) -> None:
         columns = conn.execute("PRAGMA table_info(projects)").fetchall()
         column_names = [c["name"] for c in columns]
-        expected = ["id", "title", "description", "status", "created_at", "updated_at"]
+        expected = ["id", "title", "description", "repo_path", "base_branch", "status", "created_at", "updated_at"]
         assert column_names == expected
 
     def test_comments_has_all_columns(self, conn: sqlite3.Connection) -> None:

@@ -1,10 +1,19 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 :root {
-  --bg: #0f0f0f;
-  --bg-surface: #1a1a1a;
-  --bg-hover: #252525;
-  --text: #e0e0e0;
-  --text-muted: #888;
-  --border: #2a2a2a;
+  --bg: #09090b;
+  --bg-surface: #12121a;
+  --bg-hover: #1a1a2e;
+  --bg-elevated: #1e1e30;
+  --text: #e4e4ef;
+  --text-muted: #6b6b80;
+  --text-dim: #44445a;
+  --border: #1f1f35;
+  --border-subtle: #16162a;
+  --glass-bg: rgba(18, 18, 26, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --agent-active: #3b82f6;
+  --needs-attention: #f59e0b;
   --phase-planner: #a855f7;
   --phase-coder: #3b82f6;
   --phase-reviewer: #f97316;
@@ -16,10 +25,10 @@
   --status-cancelled: #ef4444;
   --ws-connected: #22c55e;
   --ws-disconnected: #6b7280;
-  --column-width: 280px;
-  --card-radius: 8px;
-  --badge-radius: 4px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --column-width: 290px;
+  --card-radius: 10px;
+  --badge-radius: 6px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: var(--text);
   background: var(--bg);
 }
@@ -32,6 +41,18 @@
 
 body {
   min-height: 100vh;
+  position: relative;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  opacity: 0.02;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  z-index: 9999;
 }
 
 button {
@@ -39,6 +60,71 @@ button {
   font-family: inherit;
 }
 
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
+}
+
+/* Keyframe animations */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.15), 0 0 2px rgba(59, 130, 246, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.3), 0 0 6px rgba(59, 130, 246, 0.2);
+  }
+}
+
+@keyframes pulse-attention {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.15), 0 0 2px rgba(245, 158, 11, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.3), 0 0 6px rgba(245, 158, 11, 0.2);
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Task card base */
 .task-card {
-  transition: transform 0.2s ease, opacity 0.2s ease;
+  transition: transform 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  animation: fade-in-up 0.3s ease both;
+}
+
+.task-card:hover {
+  transform: translateY(-2px);
+}
+
+/* Agent active state — blue breathing glow */
+.task-card--agent-active {
+  animation: pulse-glow 2.5s ease-in-out infinite, fade-in-up 0.3s ease both;
+}
+
+/* Needs attention state — amber breathing glow */
+.task-card--needs-attention {
+  animation: pulse-attention 3s ease-in-out infinite, fade-in-up 0.3s ease both;
 }

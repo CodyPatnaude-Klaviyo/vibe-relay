@@ -31,8 +31,11 @@ export function ProjectBoard() {
           display: "flex",
           alignItems: "center",
           gap: "16px",
-          padding: "16px 24px",
-          borderBottom: "1px solid var(--border)",
+          padding: "14px 24px",
+          background: "var(--glass-bg)",
+          backdropFilter: "blur(12px)",
+          borderBottom: "1px solid var(--glass-border)",
+          boxShadow: "0 2px 12px rgba(0,0,0,0.2)",
           height: "60px",
           flexShrink: 0,
         }}
@@ -41,29 +44,38 @@ export function ProjectBoard() {
           onClick={() => navigate("/")}
           style={{
             background: "none",
-            border: "none",
+            border: "1px solid transparent",
             color: "var(--text-muted)",
             fontSize: "14px",
             cursor: "pointer",
             padding: "4px 8px",
             borderRadius: "var(--badge-radius)",
+            transition: "all 0.15s ease",
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text)")}
-          onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = "var(--text)";
+            e.currentTarget.style.borderColor = "var(--border)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = "var(--text-muted)";
+            e.currentTarget.style.borderColor = "transparent";
+          }}
         >
           &larr; Projects
         </button>
-        <h1 style={{ fontSize: "18px", fontWeight: 600, flex: 1 }}>
+        <h1 style={{ fontSize: "17px", fontWeight: 600, flex: 1, letterSpacing: "-0.2px" }}>
           {project?.title ?? "Loading..."}
         </h1>
         <div
           title={wsConnected ? "WebSocket connected" : "WebSocket disconnected"}
           style={{
-            width: "10px",
-            height: "10px",
+            width: "8px",
+            height: "8px",
             borderRadius: "50%",
             background: wsConnected ? "var(--ws-connected)" : "var(--ws-disconnected)",
+            boxShadow: wsConnected ? "0 0 8px var(--ws-connected)" : "none",
             flexShrink: 0,
+            transition: "background 0.3s ease, box-shadow 0.3s ease",
           }}
         />
       </div>
