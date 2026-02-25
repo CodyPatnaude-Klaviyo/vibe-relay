@@ -71,16 +71,18 @@ def launch_agent(task_id: str, config: dict[str, Any]) -> AgentRunResult:
         ).fetchall()
         comment_dicts = [dict(c) for c in comments]
 
-        # 2. Create worktree if needed
+        # 2. Fetch project repo info (needed for worktree creation AND prompt context)
+        project_id = task_dict["project_id"]
+        project_row = conn.execute(
+            "SELECT repo_path, base_branch FROM projects WHERE id = ?",
+            (project_id,),
+        ).fetchone()
+        repo_path = Path(project_row["repo_path"] or config["repo_path"])
+        base_branch = project_row["base_branch"] or config["base_branch"]
+        task_dict["base_branch"] = base_branch
+
+        # Create worktree if needed
         if not task_dict.get("worktree_path"):
-            # Per-project repo: check project row, fallback to config
-            project_id = task_dict["project_id"]
-            project_row = conn.execute(
-                "SELECT repo_path, base_branch FROM projects WHERE id = ?",
-                (project_id,),
-            ).fetchone()
-            repo_path = Path(project_row["repo_path"] or config["repo_path"])
-            base_branch = project_row["base_branch"] or config["base_branch"]
             worktrees_path = Path(config["worktrees_path"])
 
             wt_info = create_worktree(

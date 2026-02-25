@@ -264,8 +264,7 @@ async def process_triggers(db_path: str, config: dict[str, Any]) -> None:
 
                         if should_dispatch(event, conn):
                             if not _can_dispatch_task(conn, task_id):
-                                mark_trigger_consumed(conn, event["id"])
-                                continue
+                                continue  # Not ready yet, retry next cycle
 
                             if count_active_runs(conn) >= max_agents:
                                 continue  # At capacity, retry next cycle

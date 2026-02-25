@@ -34,6 +34,18 @@ def create_app(db_path: str, config: dict[str, Any] | None = None) -> FastAPI:
 
         yield
 
+        # Terminate all spawned Claude subprocesses
+        if config is not None:
+            from runner.claude import terminate_all
+
+            count = await asyncio.to_thread(terminate_all)
+            if count:
+                import logging
+
+                logging.getLogger(__name__).info(
+                    "Terminated %d Claude subprocess(es) on shutdown", count
+                )
+
         for task in tasks:
             task.cancel()
         for task in tasks:

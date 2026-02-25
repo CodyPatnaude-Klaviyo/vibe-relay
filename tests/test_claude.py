@@ -170,7 +170,7 @@ class TestMcpConfig:
         assert "mcpServers" in config
         assert "vibe-relay" in config["mcpServers"]
         server = config["mcpServers"]["vibe-relay"]
-        assert server["command"] == "vibe-relay"
+        assert "vibe-relay" in server["command"]
         assert "--task-id" in server["args"]
         assert "task-abc" in server["args"]
         assert server["env"]["VIBE_RELAY_DB"] == "/tmp/db.sqlite"

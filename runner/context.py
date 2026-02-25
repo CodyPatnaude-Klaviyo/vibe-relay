@@ -39,6 +39,7 @@ def build_prompt(
         f"Description: {task.get('description', '')}",
         f"Step: {task.get('step_name', '')}",
         f"Branch: {task.get('branch', '')}",
+        f"Base Branch: {task.get('base_branch', '')}",
         f"Worktree: {task.get('worktree_path', '')}",
     ]
     parts.append(f"<issue>\n{chr(10).join(issue_lines)}\n</issue>")
