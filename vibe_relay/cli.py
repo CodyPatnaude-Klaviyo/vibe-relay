@@ -91,9 +91,30 @@ def init() -> None:
 
 
 @main.command()
-def serve() -> None:
+@click.option("--port", default=8000, help="Port to listen on")
+@click.option(
+    "--reload", "use_reload", is_flag=True, help="Enable auto-reload for development"
+)
+def serve(port: int, use_reload: bool) -> None:
     """Start the vibe-relay API server."""
-    click.echo("Server not yet implemented.")
+    import uvicorn
+
+    from db.migrations import init_db
+    from vibe_relay.config import ConfigError, load_config
+
+    try:
+        config = load_config()
+    except ConfigError as e:
+        click.echo(f"Config error: {e}", err=True)
+        raise SystemExit(1)
+
+    # Ensure DB is initialized
+    init_db(config["db_path"])
+
+    from api.app import create_app
+
+    app = create_app(db_path=config["db_path"])
+    uvicorn.run(app, host="0.0.0.0", port=port, reload=use_reload)
 
 
 @main.command()
