@@ -16,7 +16,6 @@ from pathlib import Path
 
 import pytest
 
-from db.client import get_connection
 from db.migrations import init_db, run_migrations
 
 
