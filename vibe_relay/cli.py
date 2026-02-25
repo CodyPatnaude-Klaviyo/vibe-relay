@@ -3,10 +3,11 @@
 Commands:
     vibe-relay init   — scaffold config and agent prompts in current directory
     vibe-relay serve  — start the API server (placeholder)
-    vibe-relay mcp    — start the MCP server (placeholder)
+    vibe-relay mcp    — start the MCP server (stdio transport)
 """
 
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -93,6 +94,20 @@ def serve() -> None:
 
 
 @main.command()
-def mcp() -> None:
-    """Start the vibe-relay MCP server."""
-    click.echo("MCP server not yet implemented.")
+@click.option("--task-id", default=None, help="Scope context-sensitive tools to this task")
+def mcp(task_id: str | None) -> None:
+    """Start the vibe-relay MCP server (stdio transport)."""
+    from vibe_relay.config import ConfigError, load_config
+
+    # Resolve db_path from env, config, or default
+    db_path = os.environ.get("VIBE_RELAY_DB")
+    if db_path is None:
+        try:
+            config = load_config()
+            db_path = config["db_path"]
+        except ConfigError:
+            db_path = str(Path("~/.vibe-relay/vibe-relay.db").expanduser())
+
+    from vibe_relay.mcp.server import run_server
+
+    run_server(task_id=task_id, db_path=db_path)

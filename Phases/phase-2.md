@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: MCP Server"
-status: not started
+status: complete
 ---
 
 # Phase 2: MCP Server
@@ -229,19 +229,19 @@ Document the config snippet agents should include:
 
 ## Acceptance criteria
 
-- [ ] `vibe-relay mcp` starts without errors and accepts MCP tool calls via stdio
-- [ ] `create_task` creates a row in the DB and returns the task object
-- [ ] `create_subtasks` creates multiple tasks in a single call and returns all of them
-- [ ] `get_board` returns all tasks for a project with correct structure
-- [ ] `get_task` returns a task with its full comment thread in chronological order
-- [ ] `get_my_tasks("coder")` returns only `in_progress` tasks with `phase=coder`
-- [ ] `add_comment` creates a comment row and returns it
-- [ ] `update_task_status` enforces the state machine — `backlog → in_review` is rejected
-- [ ] `update_task_status` succeeds for all valid transitions
-- [ ] `complete_task` sets status to `done` and correctly detects when all siblings are complete
-- [ ] Every write operation inserts a row into the `events` table
-- [ ] The MCP server can be connected to from a Claude Code session using the config snippet above
-- [ ] Manual test: connect Claude Code to the MCP server, ask it to create a project with three tasks, verify rows appear in SQLite
+- [x] `vibe-relay mcp` starts without errors and accepts MCP tool calls via stdio
+- [x] `create_task` creates a row in the DB and returns the task object
+- [x] `create_subtasks` creates multiple tasks in a single call and returns all of them
+- [x] `get_board` returns all tasks for a project with correct structure
+- [x] `get_task` returns a task with its full comment thread in chronological order
+- [x] `get_my_tasks("coder")` returns only `in_progress` tasks with `phase=coder`
+- [x] `add_comment` creates a comment row and returns it
+- [x] `update_task_status` enforces the state machine — `backlog → in_review` is rejected
+- [x] `update_task_status` succeeds for all valid transitions
+- [x] `complete_task` sets status to `done` and correctly detects when all siblings are complete
+- [x] Every write operation inserts a row into the `events` table
+- [x] The MCP server can be connected to from a Claude Code session using the config snippet above
+- [x] Manual test: connect Claude Code to the MCP server, ask it to create a project with three tasks, verify rows appear in SQLite
 
 ---
 

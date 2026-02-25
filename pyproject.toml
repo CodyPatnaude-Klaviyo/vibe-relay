@@ -29,4 +29,4 @@ requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["vibe_relay*", "api*", "mcp*", "db*", "runner*"]
+include = ["vibe_relay*", "api*", "db*", "runner*"]

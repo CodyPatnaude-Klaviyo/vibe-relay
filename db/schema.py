@@ -59,7 +59,16 @@ TABLES = {
             allocated_at TEXT NOT NULL
         )
     """,
+    "events": """
+        CREATE TABLE IF NOT EXISTS events (
+            id          TEXT PRIMARY KEY,
+            type        TEXT NOT NULL,
+            payload     TEXT NOT NULL,
+            created_at  TEXT NOT NULL,
+            consumed    INTEGER NOT NULL DEFAULT 0
+        )
+    """,
 }
 
 # Ordered list for creation — respects foreign key dependencies
-TABLE_CREATION_ORDER = ["projects", "tasks", "comments", "agent_runs", "ports"]
+TABLE_CREATION_ORDER = ["projects", "tasks", "comments", "agent_runs", "ports", "events"]

@@ -46,7 +46,7 @@ class TestMigrations:
             "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
         ).fetchall()
         table_names = sorted(t[0] for t in tables)
-        assert table_names == ["agent_runs", "comments", "ports", "projects", "tasks"]
+        assert table_names == ["agent_runs", "comments", "events", "ports", "projects", "tasks"]
 
     def test_wal_mode_enabled(self, conn: sqlite3.Connection) -> None:
         mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
@@ -64,7 +64,7 @@ class TestMigrations:
             "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
         ).fetchall()
         table_names = sorted(t[0] for t in tables)
-        assert table_names == ["agent_runs", "comments", "ports", "projects", "tasks"]
+        assert table_names == ["agent_runs", "comments", "events", "ports", "projects", "tasks"]
 
 
 class TestProjectCRUD:
@@ -182,4 +182,10 @@ class TestTaskColumns:
         columns = conn.execute("PRAGMA table_info(ports)").fetchall()
         column_names = [c["name"] for c in columns]
         expected = ["port", "task_id", "allocated_at"]
+        assert column_names == expected
+
+    def test_events_has_all_columns(self, conn: sqlite3.Connection) -> None:
+        columns = conn.execute("PRAGMA table_info(events)").fetchall()
+        column_names = [c["name"] for c in columns]
+        expected = ["id", "type", "payload", "created_at", "consumed"]
         assert column_names == expected
