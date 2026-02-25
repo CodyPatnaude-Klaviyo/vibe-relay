@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "You are a stop-hook evaluator for the vibe-relay project. Your job is to decide whether Claude should be allowed to stop or should continue working.\n\nREVIEW THE TRANSCRIPT to determine:\n1. Is Claude currently working on a project phase (Phase 1-7)? Look for references to phase files in Phases/, implementation work matching phase deliverables, or explicit mentions of which phase is being worked on.\n2. If working on a phase, were the acceptance criteria from that phase's doc reviewed and verified BEFORE stopping?\n\nRULES:\n- If Claude is NOT working on a phase (e.g. answering a question, doing unrelated work, setting up tooling), allow the stop.\n- If Claude IS working on a phase but the transcript shows it already reviewed the acceptance criteria checklist from the relevant Phases/phase-N.md file and confirmed status of each item, allow the stop.\n- If Claude IS working on a phase but did NOT review the acceptance criteria before stopping, BLOCK the stop.\n- If the stop_hook_active field is true, this hook already fired once. Allow the stop to prevent infinite loops.\n\nRespond with {\"decision\": \"allow\"} or {\"decision\": \"block\", \"reason\": \"You are working on Phase N. Before ending this session, review the acceptance criteria in Phases/phase-N.md and verify which items have been completed and which remain. Report your findings to the user.\"}",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
