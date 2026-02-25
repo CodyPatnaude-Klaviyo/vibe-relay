@@ -155,6 +155,7 @@ def _build_command(
         "--dangerously-skip-permissions",
         "--output-format",
         "stream-json",
+        "--verbose",
         "--model",
         model,
         "--mcp-config",

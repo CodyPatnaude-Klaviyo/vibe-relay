@@ -50,6 +50,7 @@ class TestBuildCommand:
         assert "--dangerously-skip-permissions" in cmd
         assert "--output-format" in cmd
         assert "stream-json" in cmd
+        assert "--verbose" in cmd
         assert "--model" in cmd
         assert "claude-sonnet-4-5" in cmd
         assert "--resume" not in cmd

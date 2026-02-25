@@ -177,7 +177,7 @@ Useful for manual testing and debugging individual agent runs without the full a
 - [x] `launch_agent` stores `session_id` on the task record after first response
 - [x] `agent_runs` table is updated with start time, completion time, and exit code
 - [x] `vibe-relay run-agent --task-id <id>` executes end-to-end against a real task
-- [ ] Manual test: create a task via MCP, run `vibe-relay run-agent`, verify the agent can call `get_task` and `add_comment` via MCP during its run
+- [x] Manual test: create a task via MCP, run `vibe-relay run-agent`, verify the agent can call `get_task` and `add_comment` via MCP during its run
 
 ---
 
