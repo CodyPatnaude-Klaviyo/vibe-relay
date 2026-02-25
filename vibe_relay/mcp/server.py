@@ -93,8 +93,8 @@ def create_server() -> FastMCP:
 
     @server.tool(description="Return non-cancelled tasks at a given workflow step")
     def get_my_tasks(
-        step_id: str, project_id: str | None = None, ctx: Context = None
-    ) -> str:  # type: ignore[assignment]
+        step_id: str, project_id: str | None = None, ctx: Context = None  # type: ignore[assignment]
+    ) -> str:
         conn = _get_conn(ctx)
         result = tools.get_my_tasks(conn, step_id, project_id)
         return json.dumps(result, indent=2)
@@ -158,6 +158,66 @@ def create_server() -> FastMCP:
     ) -> str:
         conn = _get_conn(ctx)
         result = tools.add_comment(conn, task_id, content, author_role)
+        return json.dumps(result, indent=2)
+
+    @server.tool(
+        description="Add a dependency: successor is blocked until predecessor reaches Done"
+    )
+    def add_dependency(
+        predecessor_id: str,
+        successor_id: str,
+        ctx: Context = None,  # type: ignore[assignment]
+    ) -> str:
+        conn = _get_conn(ctx)
+        result = tools.add_dependency(conn, predecessor_id, successor_id)
+        return json.dumps(result, indent=2)
+
+    @server.tool(description="Remove a dependency edge")
+    def remove_dependency(
+        dependency_id: str,
+        ctx: Context = None,  # type: ignore[assignment]
+    ) -> str:
+        conn = _get_conn(ctx)
+        result = tools.remove_dependency(conn, dependency_id)
+        return json.dumps(result, indent=2)
+
+    @server.tool(description="Get predecessors and successors for a task")
+    def get_dependencies(
+        task_id: str,
+        ctx: Context = None,  # type: ignore[assignment]
+    ) -> str:
+        conn = _get_conn(ctx)
+        result = tools.get_dependencies(conn, task_id)
+        return json.dumps(result, indent=2)
+
+    @server.tool(description="Approve a milestone's plan, enabling child task dispatch")
+    def approve_plan(
+        task_id: str,
+        ctx: Context = None,  # type: ignore[assignment]
+    ) -> str:
+        conn = _get_conn(ctx)
+        result = tools.approve_plan(conn, task_id)
+        return json.dumps(result, indent=2)
+
+    @server.tool(
+        description="Move a task to Done, unblock dependents, auto-advance parent"
+    )
+    def complete_task(
+        task_id: str,
+        ctx: Context = None,  # type: ignore[assignment]
+    ) -> str:
+        conn = _get_conn(ctx)
+        result = tools.complete_task(conn, task_id)
+        return json.dumps(result, indent=2)
+
+    @server.tool(description="Set the output field on a task (research findings)")
+    def set_task_output(
+        task_id: str,
+        output: str,
+        ctx: Context = None,  # type: ignore[assignment]
+    ) -> str:
+        conn = _get_conn(ctx)
+        result = tools.set_task_output(conn, task_id, output)
         return json.dumps(result, indent=2)
 
     return server

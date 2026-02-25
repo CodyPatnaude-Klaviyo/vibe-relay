@@ -51,6 +51,7 @@ class TestMigrations:
             "events",
             "ports",
             "projects",
+            "task_dependencies",
             "tasks",
             "workflow_steps",
         ]
@@ -76,6 +77,7 @@ class TestMigrations:
             "events",
             "ports",
             "projects",
+            "task_dependencies",
             "tasks",
             "workflow_steps",
         ]
@@ -225,6 +227,9 @@ class TestTaskColumns:
             "description",
             "step_id",
             "cancelled",
+            "type",
+            "plan_approved",
+            "output",
             "worktree_path",
             "branch",
             "session_id",

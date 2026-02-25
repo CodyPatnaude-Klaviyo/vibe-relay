@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { BoardData, WorkflowStep } from "../types";
+import type { BoardData, Dependency, WorkflowStep } from "../types";
 import { createTask } from "../api/tasks";
 import { TaskCard } from "./TaskCard";
 
@@ -118,8 +118,50 @@ function NewTaskForm({
   );
 }
 
+function computeBlockedSet(
+  dependencies: Dependency[],
+  tasks: Record<string, { id: string; step_name: string }[]>,
+  steps: WorkflowStep[]
+): Set<string> {
+  // Find the terminal step (last position)
+  const terminalStep = steps.reduce((max, s) => (s.position > max.position ? s : max), steps[0]);
+
+  // Build a set of task IDs at the terminal step
+  const doneTaskIds = new Set<string>();
+  for (const taskList of Object.values(tasks)) {
+    for (const t of taskList) {
+      if (t.step_name === terminalStep?.name) {
+        doneTaskIds.add(t.id);
+      }
+    }
+  }
+
+  // For each successor, check if all predecessors are done
+  const blocked = new Set<string>();
+  const successorToPreds = new Map<string, string[]>();
+  for (const dep of dependencies) {
+    const existing = successorToPreds.get(dep.successor_id) ?? [];
+    existing.push(dep.predecessor_id);
+    successorToPreds.set(dep.successor_id, existing);
+  }
+
+  for (const [successorId, preds] of successorToPreds) {
+    const allDone = preds.every((pid) => doneTaskIds.has(pid));
+    if (!allDone) {
+      blocked.add(successorId);
+    }
+  }
+
+  return blocked;
+}
+
 export function Board({ data, projectId }: { data: BoardData; projectId: string }) {
   const [addingToStep, setAddingToStep] = useState<string | null>(null);
+
+  const blockedSet = useMemo(
+    () => computeBlockedSet(data.dependencies ?? [], data.tasks, data.steps),
+    [data.dependencies, data.tasks, data.steps]
+  );
 
   const columns: (WorkflowStep & { key: string })[] = data.steps.map((s) => ({
     ...s,
@@ -221,7 +263,11 @@ export function Board({ data, projectId }: { data: BoardData; projectId: string 
                 </div>
               ) : (
                 tasks.map((task) => (
-                  <TaskCard key={task.id} task={task} />
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    isBlocked={blockedSet.has(task.id)}
+                  />
                 ))
               )}
             </div>

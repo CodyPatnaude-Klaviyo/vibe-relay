@@ -32,6 +32,12 @@ class UpdateTaskRequest(BaseModel):
     cancelled: bool | None = None
     title: str | None = None
     description: str | None = None
+    output: str | None = None
+
+
+class AddDependencyRequest(BaseModel):
+    predecessor_id: str
+    successor_id: str
 
 
 class CreateCommentRequest(BaseModel):
@@ -74,6 +80,9 @@ class TaskResponse(BaseModel):
     step_name: str
     step_position: int
     cancelled: bool
+    type: str = "task"
+    plan_approved: bool = False
+    output: str | None = None
     branch: str | None = None
     worktree_path: str | None = None
     session_id: str | None = None
@@ -81,8 +90,21 @@ class TaskResponse(BaseModel):
     updated_at: str
 
 
+class DependencyInfo(BaseModel):
+    predecessors: list[dict] = []
+    successors: list[dict] = []
+
+
 class TaskDetailResponse(TaskResponse):
     comments: list[dict]
+    dependencies: DependencyInfo | None = None
+
+
+class DependencyResponse(BaseModel):
+    id: str
+    predecessor_id: str
+    successor_id: str
+    created_at: str
 
 
 class CommentResponse(BaseModel):

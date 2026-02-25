@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { addComment, getTask, getTaskRuns, updateTask } from "../api/tasks";
+import { addComment, approvePlan, getTask, getTaskRuns, updateTask } from "../api/tasks";
 import { listProjectSteps } from "../api/projects";
 import { useBoardStore } from "../store/boardStore";
 import type { WorkflowStep } from "../types";
@@ -80,6 +80,14 @@ export function TaskDetail({ taskId }: { taskId: string }) {
     },
   });
 
+  const approveMutation = useMutation({
+    mutationFn: () => approvePlan(taskId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["task", taskId] });
+      void queryClient.invalidateQueries({ queryKey: ["board"] });
+    },
+  });
+
   if (taskLoading || !task) {
     return (
       <div
@@ -105,7 +113,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
   }
 
   const validTargets = steps ? getValidTargetSteps(steps, task.step_position) : [];
-  const isMutating = moveMutation.isPending || cancelMutation.isPending;
+  const isMutating = moveMutation.isPending || cancelMutation.isPending || approveMutation.isPending;
 
   return (
     <div
@@ -148,9 +156,42 @@ export function TaskDetail({ taskId }: { taskId: string }) {
           {task.title}
         </h2>
 
-        {/* Badge */}
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
+        {/* Badge row */}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
           <StepBadge name={task.step_name} position={task.step_position} />
+          {task.type !== "task" && (
+            <span
+              style={{
+                fontSize: "11px",
+                fontWeight: 600,
+                padding: "2px 8px",
+                borderRadius: "var(--badge-radius)",
+                background:
+                  task.type === "milestone"
+                    ? "rgba(168,85,247,0.15)"
+                    : "rgba(59,130,246,0.15)",
+                color: task.type === "milestone" ? "#a855f7" : "#3b82f6",
+                border: `1px solid ${task.type === "milestone" ? "rgba(168,85,247,0.3)" : "rgba(59,130,246,0.3)"}`,
+              }}
+            >
+              {task.type === "milestone" ? "Milestone" : "Research"}
+            </span>
+          )}
+          {task.type === "milestone" && task.plan_approved && (
+            <span
+              style={{
+                fontSize: "11px",
+                fontWeight: 600,
+                padding: "2px 8px",
+                borderRadius: "var(--badge-radius)",
+                background: "rgba(34,197,94,0.15)",
+                color: "var(--status-done)",
+                border: "1px solid rgba(34,197,94,0.3)",
+              }}
+            >
+              Approved
+            </span>
+          )}
           {task.cancelled && (
             <span
               style={{
@@ -168,6 +209,33 @@ export function TaskDetail({ taskId }: { taskId: string }) {
           )}
         </div>
 
+        {/* Approve Plan button */}
+        {task.type === "milestone" && !task.plan_approved && !task.cancelled && (
+          <div style={{ marginBottom: "16px" }}>
+            <button
+              onClick={() => approveMutation.mutate()}
+              disabled={isMutating}
+              style={{
+                padding: "8px 20px",
+                background: isMutating ? "var(--border)" : "#22c55e",
+                color: "#fff",
+                border: "none",
+                borderRadius: "var(--badge-radius)",
+                fontSize: "13px",
+                fontWeight: 600,
+                cursor: isMutating ? "not-allowed" : "pointer",
+              }}
+            >
+              {approveMutation.isPending ? "Approving..." : "Approve Plan"}
+            </button>
+            {approveMutation.isError && (
+              <div style={{ color: "var(--status-cancelled)", fontSize: "12px", marginTop: "4px" }}>
+                Failed to approve. Milestone needs at least one child task.
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Description */}
         {task.description && (
           <div
@@ -180,6 +248,113 @@ export function TaskDetail({ taskId }: { taskId: string }) {
             }}
           >
             {task.description}
+          </div>
+        )}
+
+        {/* Output field (research tasks) */}
+        {task.output && (
+          <div style={{ marginBottom: "16px" }}>
+            <h4
+              style={{
+                fontSize: "13px",
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.5px",
+                color: "var(--text-muted)",
+                marginBottom: "8px",
+              }}
+            >
+              Output
+            </h4>
+            <div
+              style={{
+                background: "var(--bg)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--card-radius)",
+                padding: "12px",
+                fontSize: "13px",
+                lineHeight: 1.6,
+                whiteSpace: "pre-wrap",
+                maxHeight: "200px",
+                overflowY: "auto",
+              }}
+            >
+              {task.output}
+            </div>
+          </div>
+        )}
+
+        {/* Dependencies */}
+        {task.dependencies && (task.dependencies.predecessors.length > 0 || task.dependencies.successors.length > 0) && (
+          <div style={{ marginBottom: "16px" }}>
+            <h4
+              style={{
+                fontSize: "13px",
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.5px",
+                color: "var(--text-muted)",
+                marginBottom: "8px",
+              }}
+            >
+              Dependencies
+            </h4>
+            {task.dependencies.predecessors.length > 0 && (
+              <div style={{ marginBottom: "8px" }}>
+                <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px" }}>
+                  Blocked by:
+                </div>
+                {task.dependencies.predecessors.map((dep) => (
+                  <div
+                    key={dep.dependency_id}
+                    onClick={() => dep.predecessor_id && selectTask(dep.predecessor_id)}
+                    style={{
+                      fontSize: "12px",
+                      padding: "4px 8px",
+                      background: "var(--bg)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "var(--badge-radius)",
+                      marginBottom: "4px",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                    }}
+                  >
+                    <StepBadge name={dep.step_name} position={dep.step_position} />
+                    <span>{dep.title}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {task.dependencies.successors.length > 0 && (
+              <div>
+                <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px" }}>
+                  Blocks:
+                </div>
+                {task.dependencies.successors.map((dep) => (
+                  <div
+                    key={dep.dependency_id}
+                    onClick={() => dep.successor_id && selectTask(dep.successor_id)}
+                    style={{
+                      fontSize: "12px",
+                      padding: "4px 8px",
+                      background: "var(--bg)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "var(--badge-radius)",
+                      marginBottom: "4px",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                    }}
+                  >
+                    <StepBadge name={dep.step_name} position={dep.step_position} />
+                    <span>{dep.title}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
