@@ -25,6 +25,7 @@ DEFAULT_CONFIG = {
     "default_model": "claude-sonnet-4-5",
     "default_workflow": [
         {"name": "Plan", "system_prompt_file": "agents/planner.md"},
+        {"name": "Plan Review", "system_prompt_file": "agents/plan_reviewer.md"},
         {"name": "Research", "system_prompt_file": "agents/researcher.md"},
         {"name": "Synthesize", "system_prompt_file": "agents/synthesizer.md"},
         {"name": "Implement", "system_prompt_file": "agents/coder.md"},
@@ -62,7 +63,7 @@ def init() -> None:
     agents_dir = Path.cwd() / "agents"
     agents_dir.mkdir(exist_ok=True)
 
-    prompt_files = ["planner.md", "coder.md", "tester.md", "security.md", "reviewer.md", "orchestrator.md"]
+    prompt_files = ["planner.md", "plan_reviewer.md", "coder.md", "tester.md", "security.md", "reviewer.md", "orchestrator.md"]
     for filename in prompt_files:
         dest = agents_dir / filename
         if dest.exists():

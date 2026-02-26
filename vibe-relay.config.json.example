@@ -7,6 +7,7 @@
   "port_range": [4000, 4099],
   "default_workflow": [
     {"name": "Plan", "system_prompt_file": "agents/planner.md"},
+    {"name": "Plan Review", "system_prompt_file": "agents/plan_reviewer.md"},
     {"name": "Design", "system_prompt_file": "agents/designer.md"},
     {"name": "Backlog"},
     {"name": "Implement", "system_prompt_file": "agents/coder.md"},

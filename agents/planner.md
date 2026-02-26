@@ -126,7 +126,7 @@ Workstreams 2 and 3 both depend on workstream 1 but run **in parallel** with eac
 
 ## CRITICAL: Setting step_id for synthesize tasks
 
-The workflow steps are: Plan → Research → Synthesize → Implement → Test → Security → Review → Done
+The workflow steps are: Plan → Plan Review → Research → Synthesize → Implement → Test → Security → Review → Done
 
 Subtasks default to the Research step (next after Plan). This is correct for research tasks. But every synthesize task MUST have its `step_id` set to the Synthesize step. Find the Synthesize step ID from `get_board()` and set it explicitly.
 
