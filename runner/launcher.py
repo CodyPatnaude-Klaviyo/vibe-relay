@@ -11,7 +11,7 @@ from db.client import get_connection
 from runner.claude import AgentRunResult, ClaudeRunError, run_agent
 from runner.context import build_prompt
 from runner.recorder import complete_run, fail_run, start_run
-from runner.worktree import create_worktree
+from runner.worktree import WorktreeError, create_worktree, rebase_worktree
 
 
 class LaunchError(Exception):
@@ -100,6 +100,12 @@ def launch_agent(task_id: str, config: dict[str, Any]) -> AgentRunResult:
             conn.commit()
             task_dict["worktree_path"] = str(wt_info.path)
             task_dict["branch"] = wt_info.branch
+
+        # 2b. Rebase worktree onto latest base branch to prevent merge conflicts
+        try:
+            rebase_worktree(Path(task_dict["worktree_path"]), base_branch)
+        except WorktreeError as e:
+            raise LaunchError(f"Merge conflict during rebase: {e}") from e
 
         # 3. Load system prompt from step
         system_prompt = task_dict.get("system_prompt")

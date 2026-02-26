@@ -76,6 +76,59 @@ def create_worktree(
     return WorktreeInfo(path=wt_path, branch=branch)
 
 
+def rebase_worktree(worktree_path: Path, base_branch: str) -> None:
+    """Fetch and rebase the worktree onto the latest base branch.
+
+    Skips silently if there's no remote origin (e.g. local-only repos).
+    Aborts the rebase on conflict and raises WorktreeError.
+
+    Args:
+        worktree_path: Path to the worktree directory.
+        base_branch: Base branch to rebase onto (e.g. "main").
+
+    Raises:
+        WorktreeError: If there's a merge conflict.
+    """
+    # Check if remote origin exists; skip rebase if not
+    check = subprocess.run(
+        ["git", "remote", "get-url", "origin"],
+        cwd=str(worktree_path),
+        capture_output=True,
+    )
+    if check.returncode != 0:
+        return  # No remote origin — nothing to rebase onto
+
+    try:
+        subprocess.run(
+            ["git", "fetch", "origin", base_branch],
+            cwd=str(worktree_path),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        raise WorktreeError(
+            f"Failed to fetch origin/{base_branch}: {e.stderr.strip()}"
+        ) from e
+
+    result = subprocess.run(
+        ["git", "rebase", f"origin/{base_branch}"],
+        cwd=str(worktree_path),
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        # Abort the in-progress rebase
+        subprocess.run(
+            ["git", "rebase", "--abort"],
+            cwd=str(worktree_path),
+            capture_output=True,
+        )
+        raise WorktreeError(
+            f"Rebase conflict on origin/{base_branch}: {result.stderr[:500]}"
+        )
+
+
 def remove_worktree(worktree_path: Path, repo_path: Path) -> None:
     """Remove a worktree and delete its branch.
 
