@@ -62,6 +62,7 @@ export interface DependencyEntry {
 export interface TaskDetail extends Task {
   comments: Comment[];
   dependencies?: DependencyInfo;
+  incomplete_children?: number;
 }
 
 export interface Comment {

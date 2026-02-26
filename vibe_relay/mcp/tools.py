@@ -339,6 +339,9 @@ def get_task(conn: sqlite3.Connection, task_id: str) -> dict[str, Any]:
             "successors": deps["successors"],
         }
 
+    # Include count of incomplete children (for blocking parent completion)
+    result["incomplete_children"] = _count_incomplete_children(conn, task_id)
+
     return result
 
 
@@ -656,6 +659,19 @@ def move_task(
         info = validate_step_transition(conn, task_id, target_step_id)
     except InvalidTransitionError as e:
         return {"error": "invalid_transition", "message": str(e)}
+
+    # Block move to terminal step if children are still in progress
+    terminal = conn.execute(
+        "SELECT id FROM workflow_steps WHERE project_id = ? ORDER BY position DESC LIMIT 1",
+        (info["project_id"],),
+    ).fetchone()
+    if terminal and target_step_id == terminal["id"]:
+        incomplete = _count_incomplete_children(conn, info["task_id"])
+        if incomplete > 0:
+            return {
+                "error": "children_incomplete",
+                "message": f"Cannot move to Done: {incomplete} {'child is' if incomplete == 1 else 'children are'} still in progress",
+            }
 
     now = _now()
     conn.execute(
@@ -991,6 +1007,23 @@ def approve_plan(
     return result
 
 
+# ── Child completion check ────────────────────────────────
+
+
+def _count_incomplete_children(conn: sqlite3.Connection, task_id: str) -> int:
+    """Count non-cancelled children that haven't reached the terminal step."""
+    rows = conn.execute(
+        """SELECT t.id, ws.position,
+                  (SELECT MAX(ws2.position) FROM workflow_steps ws2
+                   WHERE ws2.project_id = t.project_id) as max_pos
+           FROM tasks t
+           JOIN workflow_steps ws ON t.step_id = ws.id
+           WHERE t.parent_task_id = ? AND t.cancelled = 0""",
+        (task_id,),
+    ).fetchall()
+    return sum(1 for r in rows if r["position"] < r["max_pos"])
+
+
 # ── Complete task + auto-advance ──────────────────────────
 
 
@@ -1026,6 +1059,14 @@ def complete_task(
         return {
             "error": "invalid_transition",
             "message": "Task is already at the terminal step",
+        }
+
+    # Block completion if children are still in progress
+    incomplete = _count_incomplete_children(conn, task_id)
+    if incomplete > 0:
+        return {
+            "error": "children_incomplete",
+            "message": f"Cannot complete: {incomplete} {'child is' if incomplete == 1 else 'children are'} still in progress",
         }
 
     # Look up current step name for enriched event

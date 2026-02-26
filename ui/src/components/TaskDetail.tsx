@@ -28,8 +28,15 @@ function formatTimestamp(iso: string): string {
   });
 }
 
-function getValidTargetSteps(steps: WorkflowStep[], currentPosition: number): WorkflowStep[] {
+function getValidTargetSteps(
+  steps: WorkflowStep[],
+  currentPosition: number,
+  incompleteChildren: number,
+): WorkflowStep[] {
+  const maxPosition = Math.max(...steps.map((s) => s.position));
   return steps.filter((s) => {
+    // Block terminal step if children are still in progress
+    if (s.position === maxPosition && incompleteChildren > 0) return false;
     if (s.position === currentPosition + 1) return true;
     if (s.position < currentPosition) return true;
     return false;
@@ -132,7 +139,8 @@ export function TaskDetail({ taskId }: { taskId: string }) {
     );
   }
 
-  const validTargets = steps ? getValidTargetSteps(steps, task.step_position) : [];
+  const incompleteChildren = task.incomplete_children ?? 0;
+  const validTargets = steps ? getValidTargetSteps(steps, task.step_position, incompleteChildren) : [];
   const isMutating = moveMutation.isPending || cancelMutation.isPending || approveMutation.isPending;
 
   return (
@@ -472,6 +480,23 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                 );
               })}
             </div>
+          </div>
+        )}
+
+        {/* Children blocking notice */}
+        {!task.cancelled && incompleteChildren > 0 && (
+          <div
+            style={{
+              marginBottom: "16px",
+              padding: "8px 12px",
+              background: "rgba(245, 158, 11, 0.1)",
+              border: "1px solid rgba(245, 158, 11, 0.3)",
+              borderRadius: "var(--badge-radius)",
+              fontSize: "12px",
+              color: "#f59e0b",
+            }}
+          >
+            Waiting on {incompleteChildren} {incompleteChildren === 1 ? "child" : "children"} to complete
           </div>
         )}
 
