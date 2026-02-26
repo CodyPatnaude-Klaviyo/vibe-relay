@@ -115,13 +115,16 @@ def _resolve_workflow_steps(
             steps.append(step)
         return steps
 
-    # Default 7-step workflow
+    # Default workflow (fallback when no config is loaded)
     return [
-        {"name": "Plan"},
+        {"name": "Scope"},
+        {"name": "Plan Review"},
         {"name": "Research"},
-        {"name": "Synthesize"},
+        {"name": "Spec"},
+        {"name": "Plan"},
         {"name": "Implement"},
         {"name": "Test"},
+        {"name": "Security"},
         {"name": "Review"},
         {"name": "Done"},
     ]
@@ -171,7 +174,7 @@ def create_project_endpoint(
     if first_agent_step is None:
         first_agent_step = steps_result["steps"][0]
 
-    # Create root milestone at the first agent step (Plan)
+    # Create root milestone at the first agent step (Scope)
     root_task = create_task(
         conn,
         title=f"Plan: {body.title}",

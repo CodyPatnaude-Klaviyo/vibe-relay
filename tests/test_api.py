@@ -133,10 +133,10 @@ class TestCreateProject:
         data = await _create_project(client)
         project_id = data["project"]["id"]
         steps = await _get_steps(client, project_id)
-        # Default 7-step SDLC workflow: Plan, Design, Backlog, Implement, Test, Review, Done
-        assert len(steps) == 7
-        assert steps[0]["name"] == "Plan"
-        assert steps[6]["name"] == "Done"
+        # Default 10-step SDLC workflow
+        assert len(steps) == 10
+        assert steps[0]["name"] == "Scope"
+        assert steps[9]["name"] == "Done"
 
     @pytest.mark.asyncio
     async def test_create_project_default_description(
@@ -218,12 +218,15 @@ class TestGetProject:
         resp = await client.get(f"/projects/{project_id}")
         body = resp.json()
         tasks = body["tasks"]
-        # Should have step names from 7-step workflow
-        assert "Plan" in tasks
+        # Should have step names from 10-step workflow
+        assert "Scope" in tasks
+        assert "Plan Review" in tasks
         assert "Research" in tasks
-        assert "Synthesize" in tasks
+        assert "Spec" in tasks
+        assert "Plan" in tasks
         assert "Implement" in tasks
         assert "Test" in tasks
+        assert "Security" in tasks
         assert "Review" in tasks
         assert "Done" in tasks
         assert "cancelled" in tasks
@@ -273,9 +276,9 @@ class TestListProjectSteps:
         project_id = data["project"]["id"]
 
         steps = await _get_steps(client, project_id)
-        assert len(steps) == 7
+        assert len(steps) == 10
         assert steps[0]["position"] == 0
-        assert steps[6]["position"] == 6
+        assert steps[9]["position"] == 9
 
     @pytest.mark.asyncio
     async def test_nonexistent_project_404(self, client: AsyncClient) -> None:
@@ -308,10 +311,10 @@ class TestCreateTask:
         steps = await _get_steps(client, project_id)
 
         task = await _create_task(
-            client, project_id, title="Write code", step_id=steps[1]["id"]
+            client, project_id, title="Write code", step_id=steps[2]["id"]
         )
         assert task["title"] == "Write code"
-        assert task["step_id"] == steps[1]["id"]
+        assert task["step_id"] == steps[2]["id"]
         assert task["step_name"] == "Research"
         assert task["cancelled"] is False
         assert task["project_id"] == project_id

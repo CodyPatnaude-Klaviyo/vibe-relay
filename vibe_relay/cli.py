@@ -24,10 +24,11 @@ DEFAULT_CONFIG = {
     "port_range": [4000, 4099],
     "default_model": "claude-sonnet-4-5",
     "default_workflow": [
-        {"name": "Plan", "system_prompt_file": "agents/planner.md"},
+        {"name": "Scope", "system_prompt_file": "agents/scoper.md"},
         {"name": "Plan Review", "system_prompt_file": "agents/plan_reviewer.md"},
         {"name": "Research", "system_prompt_file": "agents/researcher.md"},
-        {"name": "Synthesize", "system_prompt_file": "agents/synthesizer.md"},
+        {"name": "Spec", "system_prompt_file": "agents/spec.md"},
+        {"name": "Plan", "system_prompt_file": "agents/planner.md"},
         {"name": "Implement", "system_prompt_file": "agents/coder.md"},
         {"name": "Test", "system_prompt_file": "agents/tester.md"},
         {"name": "Security", "system_prompt_file": "agents/security.md"},
@@ -63,7 +64,17 @@ def init() -> None:
     agents_dir = Path.cwd() / "agents"
     agents_dir.mkdir(exist_ok=True)
 
-    prompt_files = ["planner.md", "plan_reviewer.md", "coder.md", "tester.md", "security.md", "reviewer.md", "orchestrator.md"]
+    prompt_files = [
+        "scoper.md",
+        "plan_reviewer.md",
+        "spec.md",
+        "planner.md",
+        "coder.md",
+        "tester.md",
+        "security.md",
+        "reviewer.md",
+        "orchestrator.md",
+    ]
     for filename in prompt_files:
         dest = agents_dir / filename
         if dest.exists():
