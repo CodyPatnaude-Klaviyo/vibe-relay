@@ -29,6 +29,7 @@ DEFAULT_CONFIG = {
         {"name": "Synthesize", "system_prompt_file": "agents/synthesizer.md"},
         {"name": "Implement", "system_prompt_file": "agents/coder.md"},
         {"name": "Test", "system_prompt_file": "agents/tester.md"},
+        {"name": "Security", "system_prompt_file": "agents/security.md"},
         {"name": "Review", "system_prompt_file": "agents/reviewer.md"},
         {"name": "Done"},
     ],
@@ -61,7 +62,7 @@ def init() -> None:
     agents_dir = Path.cwd() / "agents"
     agents_dir.mkdir(exist_ok=True)
 
-    prompt_files = ["planner.md", "coder.md", "reviewer.md", "orchestrator.md"]
+    prompt_files = ["planner.md", "coder.md", "tester.md", "security.md", "reviewer.md", "orchestrator.md"]
     for filename in prompt_files:
         dest = agents_dir / filename
         if dest.exists():

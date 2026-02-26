@@ -8,6 +8,8 @@ import sqlite3
 import uuid
 from datetime import datetime, timezone
 
+from vibe_relay.mcp.events import emit_event
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -34,6 +36,7 @@ def start_run(conn: sqlite3.Connection, task_id: str, step_id: str) -> str:
         "INSERT INTO agent_runs (id, task_id, step_id, started_at) VALUES (?, ?, ?, ?)",
         (run_id, task_id, step_id, now),
     )
+    emit_event(conn, "task_updated", {"task_id": task_id, "run_id": run_id})
     conn.commit()
     return run_id
 
@@ -51,6 +54,10 @@ def complete_run(conn: sqlite3.Connection, run_id: str, exit_code: int) -> None:
         "UPDATE agent_runs SET completed_at = ?, exit_code = ? WHERE id = ?",
         (now, exit_code, run_id),
     )
+    # Look up task_id for the event
+    row = conn.execute("SELECT task_id FROM agent_runs WHERE id = ?", (run_id,)).fetchone()
+    if row:
+        emit_event(conn, "task_updated", {"task_id": row["task_id"], "run_id": run_id})
     conn.commit()
 
 
@@ -67,4 +74,7 @@ def fail_run(conn: sqlite3.Connection, run_id: str, error: str) -> None:
         "UPDATE agent_runs SET completed_at = ?, exit_code = -1, error = ? WHERE id = ?",
         (now, error, run_id),
     )
+    row = conn.execute("SELECT task_id FROM agent_runs WHERE id = ?", (run_id,)).fetchone()
+    if row:
+        emit_event(conn, "task_updated", {"task_id": row["task_id"], "run_id": run_id})
     conn.commit()

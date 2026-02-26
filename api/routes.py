@@ -4,6 +4,7 @@ Routes wrap MCP tool functions with HTTP semantics. All board mutations
 go through the MCP tools (source of truth for business logic).
 """
 
+import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -83,7 +84,9 @@ def _resolve_workflow_steps(
                 step["system_prompt"] = ws.system_prompt
             elif ws.system_prompt_file:
                 # Read system prompt from file — prefer project repo_path over config
-                repo_path = body.repo_path or (config.get("repo_path", ".") if config else ".")
+                repo_path = body.repo_path or (
+                    config.get("repo_path", ".") if config else "."
+                )
                 prompt_path = Path(repo_path) / ws.system_prompt_file
                 if prompt_path.exists():
                     step["system_prompt"] = prompt_path.read_text()
@@ -467,6 +470,138 @@ def get_config_defaults() -> dict[str, Any]:
     return {
         "repo_path": _config.get("repo_path") if _config else None,
         "base_branch": _config.get("base_branch") if _config else None,
+    }
+
+
+# ── Agent log streaming endpoint ──────────────────────────
+
+
+def _get_transcript_path(worktree_path: str, session_id: str) -> Path | None:
+    """Derive the Claude Code transcript JSONL path for a session.
+
+    Claude Code stores transcripts at:
+    ~/.claude/projects/{path-encoded-worktree}/{session_id}.jsonl
+
+    The path encoding replaces leading '/' and all '/' with '-'.
+    """
+    encoded = worktree_path.lstrip("/").replace("/", "-")
+    transcript = Path.home() / ".claude" / "projects" / encoded / f"{session_id}.jsonl"
+    if transcript.exists():
+        return transcript
+    return None
+
+
+_LOG_MESSAGE_TYPES = {"assistant", "tool_use", "tool_result", "system"}
+
+
+@router.get("/tasks/{task_id}/logs")
+def get_task_logs(
+    task_id: str,
+    offset: int = 0,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> dict[str, Any]:
+    """Stream agent transcript logs for a running or completed task.
+
+    Returns JSONL lines from the Claude Code session transcript, filtered
+    to meaningful message types. Use `offset` for pagination — pass back
+    the returned `offset` to get only new lines.
+    """
+    task = conn.execute(
+        "SELECT id, session_id, worktree_path FROM tasks WHERE id = ?",
+        (task_id,),
+    ).fetchone()
+    if task is None:
+        raise HTTPException(status_code=404, detail=f"Task '{task_id}' not found")
+
+    session_id = task["session_id"]
+    worktree_path = task["worktree_path"]
+
+    if not session_id:
+        return {"lines": [], "offset": 0, "status": "no_session"}
+
+    if not worktree_path:
+        return {"lines": [], "offset": 0, "status": "no_worktree"}
+
+    transcript = _get_transcript_path(worktree_path, session_id)
+    if transcript is None:
+        return {"lines": [], "offset": offset, "status": "transcript_not_found"}
+
+    lines: list[dict[str, Any]] = []
+    new_offset = offset
+    try:
+        with open(transcript) as f:
+            for i, raw_line in enumerate(f):
+                if i < offset:
+                    continue
+                raw_line = raw_line.strip()
+                if not raw_line:
+                    continue
+                try:
+                    entry = json.loads(raw_line)
+                except json.JSONDecodeError:
+                    continue
+
+                msg_type = entry.get("type", "")
+                if msg_type not in _LOG_MESSAGE_TYPES:
+                    continue
+
+                line_data: dict[str, Any] = {
+                    "index": i,
+                    "type": msg_type,
+                }
+
+                if msg_type == "assistant" and "message" in entry:
+                    msg = entry["message"]
+                    if isinstance(msg, dict):
+                        content = msg.get("content", "")
+                        if isinstance(content, list):
+                            texts = [
+                                b.get("text", "")
+                                for b in content
+                                if isinstance(b, dict) and b.get("type") == "text"
+                            ]
+                            line_data["content"] = "\n".join(texts) if texts else ""
+                        else:
+                            line_data["content"] = str(content)
+                    else:
+                        line_data["content"] = str(msg)
+                elif msg_type == "tool_use":
+                    line_data["tool"] = entry.get("name", entry.get("tool", "unknown"))
+                    tool_input = entry.get("input", entry.get("args", ""))
+                    input_str = (
+                        json.dumps(tool_input)
+                        if not isinstance(tool_input, str)
+                        else tool_input
+                    )
+                    if len(input_str) > 500:
+                        input_str = input_str[:500] + "..."
+                    line_data["content"] = input_str
+                elif msg_type == "tool_result":
+                    result_content = entry.get("content", entry.get("output", ""))
+                    result_str = str(result_content)
+                    if len(result_str) > 500:
+                        result_str = result_str[:500] + "..."
+                    line_data["content"] = result_str
+                elif msg_type == "system":
+                    line_data["content"] = str(
+                        entry.get("message", entry.get("content", ""))
+                    )
+
+                lines.append(line_data)
+                new_offset = i + 1
+
+    except OSError:
+        return {"lines": [], "offset": offset, "status": "read_error"}
+
+    active_run = conn.execute(
+        "SELECT id FROM agent_runs WHERE task_id = ? AND completed_at IS NULL",
+        (task_id,),
+    ).fetchone()
+
+    return {
+        "lines": lines,
+        "offset": new_offset,
+        "status": "running" if active_run else "completed",
     }
 
 

@@ -151,7 +151,7 @@ export function TaskCard({ task, isBlocked }: { task: Task; isBlocked?: boolean 
           <StatusBadge label="Blocked" color="#6b7280" />
         )}
 
-        {task.type === "research" && (
+        {task.type === "research" && task.step_name.toLowerCase() !== "research" && (
           <StatusBadge label="Research" color="#3b82f6" />
         )}
 

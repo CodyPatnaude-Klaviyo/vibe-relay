@@ -64,3 +64,20 @@ export function removeDependency(dependencyId: string): Promise<void> {
     method: "DELETE",
   });
 }
+
+export interface LogLine {
+  index: number;
+  type: "assistant" | "tool_use" | "tool_result" | "system";
+  content?: string;
+  tool?: string;
+}
+
+export interface LogsResponse {
+  lines: LogLine[];
+  offset: number;
+  status: "running" | "completed" | "no_session" | "no_worktree" | "transcript_not_found" | "read_error";
+}
+
+export function getAgentLogs(taskId: string, offset: number = 0): Promise<LogsResponse> {
+  return apiFetch(`/tasks/${taskId}/logs?offset=${offset}`);
+}

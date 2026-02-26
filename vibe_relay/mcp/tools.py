@@ -195,7 +195,10 @@ def create_project(
     if repo_path:
         p = Path(repo_path).expanduser().resolve()
         if not is_git_repo(p):
-            return {"error": "invalid_input", "message": f"Not a git repository: {repo_path}"}
+            return {
+                "error": "invalid_input",
+                "message": f"Not a git repository: {repo_path}",
+            }
         resolved_repo = str(p)
         if not resolved_branch:
             resolved_branch = detect_default_branch(p)
@@ -486,6 +489,7 @@ def create_subtasks(
     tasks: list[dict[str, str]],
     default_step_id: str | None = None,
     dependencies: list[dict[str, int]] | None = None,
+    cascade_deps_from: str | None = None,
 ) -> dict[str, Any]:
     """Bulk create subtasks under a parent.
 
@@ -496,6 +500,10 @@ def create_subtasks(
     dependencies: optional list of {"from_index": i, "to_index": j} dicts
     that create dependency edges between tasks in the same batch. Edges are
     created BEFORE task_created events are emitted, preventing race conditions.
+
+    cascade_deps_from: optional task ID whose successors should be re-blocked
+    on ALL newly created tasks. Used by synthesize agents to ensure downstream
+    workstreams stay blocked until implementation tasks complete.
     """
     parent = conn.execute(
         "SELECT id, project_id, step_id FROM tasks WHERE id = ?", (parent_task_id,)
@@ -604,6 +612,24 @@ def create_subtasks(
                         (dep_id, created[from_idx]["id"], created[to_idx]["id"], now),
                     )
 
+    # Cascade dependencies: make successors of cascade_deps_from also depend
+    # on all newly created tasks. This keeps downstream workstreams blocked
+    # until these implementation tasks reach Done.
+    if cascade_deps_from:
+        successors = conn.execute(
+            "SELECT successor_id FROM task_dependencies WHERE predecessor_id = ?",
+            (cascade_deps_from,),
+        ).fetchall()
+        for succ_row in successors:
+            succ_id = succ_row["successor_id"]
+            for t in created:
+                dep_id = _uuid()
+                conn.execute(
+                    """INSERT INTO task_dependencies (id, predecessor_id, successor_id, created_at)
+                       VALUES (?, ?, ?, ?)""",
+                    (dep_id, t["id"], succ_id, now),
+                )
+
     emit_event(
         conn,
         "subtasks_created",
@@ -644,6 +670,13 @@ def move_task(
             "old_step_id": info["current_step_id"],
             "new_step_id": target_step_id,
             "project_id": info["project_id"],
+            "from_step_name": info["current_step_name"],
+            "to_step_name": info["target_step_name"],
+            "from_position": info["current_position"],
+            "to_position": info["target_position"],
+            "direction": "forward"
+            if info["target_position"] > info["current_position"]
+            else "backward",
         },
     )
     conn.commit()
@@ -995,6 +1028,12 @@ def complete_task(
             "message": "Task is already at the terminal step",
         }
 
+    # Look up current step name for enriched event
+    current_step = conn.execute(
+        "SELECT name, position FROM workflow_steps WHERE id = ?",
+        (task["step_id"],),
+    ).fetchone()
+
     # Move to terminal step
     now = _now()
     conn.execute(
@@ -1009,6 +1048,11 @@ def complete_task(
             "old_step_id": task["step_id"],
             "new_step_id": terminal["id"],
             "project_id": task["project_id"],
+            "from_step_name": current_step["name"],
+            "to_step_name": terminal["name"],
+            "from_position": current_step["position"],
+            "to_position": terminal["position"],
+            "direction": "forward",
         },
     )
 
@@ -1123,6 +1167,11 @@ def _check_sibling_completion(conn: sqlite3.Connection, parent_task_id: str) -> 
                 "old_step_id": parent["step_id"],
                 "new_step_id": next_step["id"],
                 "project_id": parent["project_id"],
+                "from_step_name": parent["step_name"],
+                "to_step_name": next_step["name"],
+                "from_position": parent["current_position"],
+                "to_position": next_step["position"],
+                "direction": "forward",
             },
         )
 

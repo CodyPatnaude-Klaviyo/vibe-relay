@@ -3,6 +3,7 @@ import { addComment, approvePlan, getTask, getTaskRuns, updateTask } from "../ap
 import { listProjectSteps } from "../api/projects";
 import { useBoardStore } from "../store/boardStore";
 import type { WorkflowStep } from "../types";
+import { AgentLogViewer } from "./AgentLogViewer";
 import { CommentThread } from "./CommentThread";
 import { StepBadge } from "./StepBadge";
 import { STEP_PALETTE, withAlpha } from "../utils/colors";
@@ -576,6 +577,14 @@ export function TaskDetail({ taskId }: { taskId: string }) {
               })}
             </div>
           </div>
+        )}
+
+        {/* Agent Transcript Viewer */}
+        {task.session_id && (
+          <AgentLogViewer
+            taskId={taskId}
+            isRunning={runs?.some((r) => !r.completed_at) ?? false}
+          />
         )}
       </div>
     </div>
