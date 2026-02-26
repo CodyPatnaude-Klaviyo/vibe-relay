@@ -93,12 +93,14 @@ export interface WebSocketEvent {
     | "task_moved"
     | "task_cancelled"
     | "task_uncancelled"
+    | "task_updated"
     | "comment_added"
     | "project_created"
     | "project_updated"
     | "plan_approved"
     | "task_ready"
     | "milestone_completed"
+    | "subtasks_created"
     | "dependency_created"
     | "dependency_removed";
   payload: Record<string, unknown>;

@@ -47,19 +47,18 @@ interface Props {
   isRunning: boolean;
 }
 
+/** Wrapper that remounts the viewer when taskId changes, resetting all state. */
 export function AgentLogViewer({ taskId, isRunning }: Props) {
+  return <AgentLogViewerInner key={taskId} taskId={taskId} isRunning={isRunning} />;
+}
+
+function AgentLogViewerInner({ taskId, isRunning }: Props) {
   const [lines, setLines] = useState<LogLine[]>([]);
   const [offset, setOffset] = useState(0);
   const [status, setStatus] = useState<string>("");
   const [expanded, setExpanded] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(true);
-
-  useEffect(() => {
-    setLines([]);
-    setOffset(0);
-    setStatus("");
-  }, [taskId]);
 
   useEffect(() => {
     if (!expanded) return;

@@ -57,21 +57,20 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
 
 export function TaskDetail({ taskId }: { taskId: string }) {
   const selectTask = useBoardStore((s) => s.selectTask);
-  const eventVersion = useBoardStore((s) => s.eventVersion);
   const queryClient = useQueryClient();
 
   const { data: task, isLoading: taskLoading } = useQuery({
-    queryKey: ["task", taskId, eventVersion],
+    queryKey: ["task", taskId],
     queryFn: () => getTask(taskId),
   });
 
   const { data: runs } = useQuery({
-    queryKey: ["runs", taskId, eventVersion],
+    queryKey: ["runs", taskId],
     queryFn: () => getTaskRuns(taskId),
   });
 
   const { data: steps } = useQuery({
-    queryKey: ["steps", task?.project_id, eventVersion],
+    queryKey: ["steps", task?.project_id],
     queryFn: () => listProjectSteps(task!.project_id),
     enabled: !!task?.project_id,
   });
