@@ -53,3 +53,25 @@ export interface RepoValidation {
 export function validateRepo(path: string): Promise<RepoValidation> {
   return apiFetch(`/repos/validate?path=${encodeURIComponent(path)}`);
 }
+
+export interface StepPrompt {
+  step_id: string;
+  step_name: string;
+  system_prompt: string;
+  system_prompt_file: string | null;
+}
+
+export function getStepPrompt(projectId: string, stepId: string): Promise<StepPrompt> {
+  return apiFetch(`/projects/${projectId}/steps/${stepId}/prompt`);
+}
+
+export function updateStepPrompt(
+  projectId: string,
+  stepId: string,
+  systemPrompt: string,
+): Promise<{ step_id: string; step_name: string; system_prompt: string }> {
+  return apiFetch(`/projects/${projectId}/steps/${stepId}/prompt`, {
+    method: "PUT",
+    body: JSON.stringify({ system_prompt: systemPrompt }),
+  });
+}

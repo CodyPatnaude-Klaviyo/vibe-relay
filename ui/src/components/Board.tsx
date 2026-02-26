@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { BoardData, Dependency, WorkflowStep } from "../types";
 import { createTask } from "../api/tasks";
 import { TaskCard } from "./TaskCard";
+import { PromptEditor } from "./PromptEditor";
 import { STEP_PALETTE, withAlpha } from "../utils/colors";
 
 function getStepColor(step: WorkflowStep): string {
@@ -169,6 +170,7 @@ function computeBlockedSet(
 
 export function Board({ data, projectId }: { data: BoardData; projectId: string }) {
   const [addingToStep, setAddingToStep] = useState<string | null>(null);
+  const [editingPrompt, setEditingPrompt] = useState<{ stepId: string; stepName: string } | null>(null);
 
   const blockedSet = useMemo(
     () => computeBlockedSet(data.dependencies ?? [], data.tasks, data.steps),
@@ -259,6 +261,33 @@ export function Board({ data, projectId }: { data: BoardData; projectId: string 
                 >
                   {tasks.length}
                 </span>
+                {col.has_agent && (
+                  <button
+                    onClick={() => setEditingPrompt({ stepId: col.id, stepName: col.name })}
+                    title={`Edit ${col.name} prompt`}
+                    style={{
+                      background: "none",
+                      border: "1px solid transparent",
+                      color: "var(--text-dim)",
+                      fontSize: "12px",
+                      cursor: "pointer",
+                      padding: "0 4px",
+                      lineHeight: 1,
+                      borderRadius: "var(--badge-radius)",
+                      transition: "border-color 0.15s ease, color 0.15s ease",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = "var(--border)";
+                      e.currentTarget.style.color = "var(--text)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = "transparent";
+                      e.currentTarget.style.color = "var(--text-dim)";
+                    }}
+                  >
+                    ✎
+                  </button>
+                )}
                 <button
                   onClick={() => setAddingToStep(addingToStep === col.id ? null : col.id)}
                   title={`Add task to ${col.name}`}
@@ -322,6 +351,16 @@ export function Board({ data, projectId }: { data: BoardData; projectId: string 
           </div>
         );
       })}
+
+      {/* Prompt editor modal */}
+      {editingPrompt && (
+        <PromptEditor
+          projectId={projectId}
+          stepId={editingPrompt.stepId}
+          stepName={editingPrompt.stepName}
+          onClose={() => setEditingPrompt(null)}
+        />
+      )}
 
       {/* Cancelled column */}
       {showCancelled && (

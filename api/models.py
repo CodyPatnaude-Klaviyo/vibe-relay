@@ -47,6 +47,10 @@ class CreateCommentRequest(BaseModel):
     author_role: str
 
 
+class UpdatePromptRequest(BaseModel):
+    system_prompt: str
+
+
 # ── Response models ─────────────────────────────────────
 
 

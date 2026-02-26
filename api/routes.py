@@ -31,6 +31,7 @@ from api.models import (
     ProjectResponse,
     TaskDetailResponse,
     TaskResponse,
+    UpdatePromptRequest,
     UpdateTaskRequest,
     WorkflowStepResponse,
 )
@@ -470,6 +471,59 @@ def get_config_defaults() -> dict[str, Any]:
     return {
         "repo_path": _config.get("repo_path") if _config else None,
         "base_branch": _config.get("base_branch") if _config else None,
+    }
+
+
+# ── Agent prompt management ─────────────────────────────
+
+
+@router.get("/projects/{project_id}/steps/{step_id}/prompt")
+def get_step_prompt(
+    project_id: str,
+    step_id: str,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> dict[str, Any]:
+    """Get the system prompt for a workflow step."""
+    step = conn.execute(
+        "SELECT id, name, system_prompt, system_prompt_file FROM workflow_steps WHERE id = ? AND project_id = ?",
+        (step_id, project_id),
+    ).fetchone()
+    if step is None:
+        raise HTTPException(status_code=404, detail=f"Step '{step_id}' not found")
+
+    return {
+        "step_id": step["id"],
+        "step_name": step["name"],
+        "system_prompt": step["system_prompt"] or "",
+        "system_prompt_file": step["system_prompt_file"],
+    }
+
+
+@router.put("/projects/{project_id}/steps/{step_id}/prompt")
+def update_step_prompt(
+    project_id: str,
+    step_id: str,
+    body: UpdatePromptRequest,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> dict[str, Any]:
+    """Update the system prompt for a workflow step."""
+    step = conn.execute(
+        "SELECT id, name FROM workflow_steps WHERE id = ? AND project_id = ?",
+        (step_id, project_id),
+    ).fetchone()
+    if step is None:
+        raise HTTPException(status_code=404, detail=f"Step '{step_id}' not found")
+
+    conn.execute(
+        "UPDATE workflow_steps SET system_prompt = ? WHERE id = ?",
+        (body.system_prompt, step_id),
+    )
+    conn.commit()
+
+    return {
+        "step_id": step["id"],
+        "step_name": step["name"],
+        "system_prompt": body.system_prompt,
     }
 
 
