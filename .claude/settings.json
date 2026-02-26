@@ -1,15 +1,1 @@
-{
-  "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "prompt",
-            "prompt": "You are a stop-hook evaluator. Output ONLY a raw JSON object. No markdown, no code fences, no backticks, no explanation. Just the JSON.\n\nValid responses (copy exactly, changing only the reason string):\n{\"decision\": \"approve\"}\n{\"decision\": \"block\", \"reason\": \"explanation here\"}\n\nEvaluate whether Claude should stop:\n1. Is Claude working on a project phase (Phase 1-7)? Look for references to Phases/ files, implementation work, or explicit phase mentions.\n2. If yes, did Claude review the acceptance criteria from that phase doc BEFORE stopping?\n\nRules:\n- Not working on a phase -> {\"decision\": \"approve\"}\n- Working on a phase AND already reviewed acceptance criteria -> {\"decision\": \"approve\"}\n- Working on a phase but did NOT review acceptance criteria -> {\"decision\": \"block\", \"reason\": \"You are working on Phase N. Review the acceptance criteria in Phases/phase-N.md and verify status of each item before stopping.\"}\n- Hook already fired once in transcript -> {\"decision\": \"approve\"}\n\nRemember: output ONLY the JSON object, nothing else.",
-            "timeout": 30
-          }
-        ]
-      }
-    ]
-  }
-}
+{}
