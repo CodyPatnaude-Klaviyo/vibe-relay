@@ -10,6 +10,7 @@ build/
 # vibe-relay runtime
 vibe-relay.config.json
 *.db
+.env
 
 # IDE
 .idea/

@@ -1188,43 +1188,39 @@ def _check_sibling_completion(conn: sqlite3.Connection, parent_task_id: str) -> 
     if not all_done:
         return
 
-    # Auto-advance: move parent to next step
-    next_step = conn.execute(
-        "SELECT id, name, position FROM workflow_steps WHERE project_id = ? AND position = ?",
-        (parent["project_id"], parent["current_position"] + 1),
-    ).fetchone()
+    # Already at terminal — nothing to do
+    if parent["current_position"] == terminal["position"]:
+        return
 
-    if next_step:
-        now = _now()
-        conn.execute(
-            "UPDATE tasks SET step_id = ?, updated_at = ? WHERE id = ?",
-            (next_step["id"], now, parent_task_id),
-        )
-        emit_event(
-            conn,
-            "task_moved",
-            {
-                "task_id": parent_task_id,
-                "old_step_id": parent["step_id"],
-                "new_step_id": next_step["id"],
-                "project_id": parent["project_id"],
-                "from_step_name": parent["step_name"],
-                "to_step_name": next_step["name"],
-                "from_position": parent["current_position"],
-                "to_position": next_step["position"],
-                "direction": "forward",
-            },
-        )
+    # Auto-advance: move parent directly to Done (terminal step)
+    now = _now()
+    conn.execute(
+        "UPDATE tasks SET step_id = ?, updated_at = ? WHERE id = ?",
+        (terminal["id"], now, parent_task_id),
+    )
+    emit_event(
+        conn,
+        "task_moved",
+        {
+            "task_id": parent_task_id,
+            "old_step_id": parent["step_id"],
+            "new_step_id": terminal["id"],
+            "project_id": parent["project_id"],
+            "from_step_name": parent["step_name"],
+            "to_step_name": "Done",
+            "from_position": parent["current_position"],
+            "to_position": terminal["position"],
+            "direction": "forward",
+        },
+    )
 
-        # If parent reached terminal, check its own parent
-        if next_step["position"] == terminal["position"]:
-            emit_event(
-                conn,
-                "milestone_completed",
-                {"task_id": parent_task_id, "project_id": parent["project_id"]},
-            )
-            if parent["parent_task_id"]:
-                _check_sibling_completion(conn, parent["parent_task_id"])
+    emit_event(
+        conn,
+        "milestone_completed",
+        {"task_id": parent_task_id, "project_id": parent["project_id"]},
+    )
+    if parent["parent_task_id"]:
+        _check_sibling_completion(conn, parent["parent_task_id"])
 
 
 def set_task_output(

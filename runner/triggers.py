@@ -191,13 +191,23 @@ def _handle_task_ready(
     if task is None or task["cancelled"]:
         return
 
-    # If current step already has an agent, dispatch here (don't advance)
+    # If current step already has an agent, dispatch here (don't advance).
+    # But only emit a new event if there isn't already an unconsumed one for this task
+    # to avoid duplicate dispatches.
     if task["current_system_prompt"]:
-        emit_event(
-            conn,
-            "task_created",
-            {"task_id": task_id, "project_id": task["project_id"]},
-        )
+        existing = conn.execute(
+            """SELECT id FROM events
+               WHERE type IN ('task_created', 'task_moved')
+               AND json_extract(payload, '$.task_id') = ?
+               AND trigger_consumed = 0""",
+            (task_id,),
+        ).fetchone()
+        if not existing:
+            emit_event(
+                conn,
+                "task_created",
+                {"task_id": task_id, "project_id": task["project_id"]},
+            )
         conn.commit()
         return
 

@@ -546,9 +546,9 @@ class TestAutoAdvance:
         assert m["step_name"] == "Plan"
 
         complete_task(conn, r2["id"])
-        # After r2 completes, all children done → milestone advances to Design
+        # After r2 completes, all children done → milestone jumps to Done
         m = get_task(conn, milestone["id"])
-        assert m["step_name"] == "Design"
+        assert m["step_name"] == "Done"
 
     def test_cancelled_children_ignored(self, conn: sqlite3.Connection) -> None:
         """Cancelled children should not prevent auto-advance."""
@@ -577,7 +577,7 @@ class TestAutoAdvance:
         cancel_task(conn, r2["id"])
         complete_task(conn, r1["id"])
         m = get_task(conn, milestone["id"])
-        assert m["step_name"] == "Design"
+        assert m["step_name"] == "Done"
 
     def test_no_advance_when_children_remain(self, conn: sqlite3.Connection) -> None:
         pid, steps = _seed_project_with_7steps(conn)

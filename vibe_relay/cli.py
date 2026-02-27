@@ -13,6 +13,9 @@ import shutil
 from pathlib import Path
 
 import click
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 DEFAULT_CONFIG = {
@@ -26,9 +29,9 @@ DEFAULT_CONFIG = {
     "default_workflow": [
         {"name": "Scope", "system_prompt_file": "agents/scoper.md"},
         {"name": "Plan Review", "system_prompt_file": "agents/plan_reviewer.md"},
+        {"name": "Plan", "system_prompt_file": "agents/planner.md"},
         {"name": "Research", "system_prompt_file": "agents/researcher.md"},
         {"name": "Spec", "system_prompt_file": "agents/spec.md"},
-        {"name": "Plan", "system_prompt_file": "agents/planner.md"},
         {"name": "Implement", "system_prompt_file": "agents/coder.md"},
         {"name": "Test", "system_prompt_file": "agents/tester.md"},
         {"name": "Security", "system_prompt_file": "agents/security.md"},
@@ -67,8 +70,9 @@ def init() -> None:
     prompt_files = [
         "scoper.md",
         "plan_reviewer.md",
-        "spec.md",
         "planner.md",
+        "researcher.md",
+        "spec.md",
         "coder.md",
         "tester.md",
         "security.md",

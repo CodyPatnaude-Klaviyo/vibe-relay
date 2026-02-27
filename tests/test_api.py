@@ -315,7 +315,7 @@ class TestCreateTask:
         )
         assert task["title"] == "Write code"
         assert task["step_id"] == steps[2]["id"]
-        assert task["step_name"] == "Research"
+        assert task["step_name"] == "Plan"
         assert task["cancelled"] is False
         assert task["project_id"] == project_id
         assert task["parent_task_id"] is None

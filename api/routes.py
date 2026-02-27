@@ -119,9 +119,9 @@ def _resolve_workflow_steps(
     return [
         {"name": "Scope"},
         {"name": "Plan Review"},
+        {"name": "Plan"},
         {"name": "Research"},
         {"name": "Spec"},
-        {"name": "Plan"},
         {"name": "Implement"},
         {"name": "Test"},
         {"name": "Security"},
@@ -539,9 +539,9 @@ def _get_transcript_path(worktree_path: str, session_id: str) -> Path | None:
     Claude Code stores transcripts at:
     ~/.claude/projects/{path-encoded-worktree}/{session_id}.jsonl
 
-    The path encoding replaces leading '/' and all '/' with '-'.
+    The path encoding replaces '/' with '-' and '.' with '-'.
     """
-    encoded = worktree_path.lstrip("/").replace("/", "-")
+    encoded = "-" + worktree_path.lstrip("/").replace("/", "-").replace(".", "-")
     transcript = Path.home() / ".claude" / "projects" / encoded / f"{session_id}.jsonl"
     if transcript.exists():
         return transcript
