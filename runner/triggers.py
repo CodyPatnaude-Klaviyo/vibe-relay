@@ -7,6 +7,8 @@ Runs as an asyncio background task inside the FastAPI lifespan.
 import asyncio
 import logging
 import sqlite3
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -127,13 +129,15 @@ def should_cleanup(
     return False
 
 
-async def _launch_in_thread(task_id: str, config: dict[str, Any]) -> None:
+async def _launch_in_thread(
+    task_id: str, config: dict[str, Any], run_id: str | None = None
+) -> None:
     """Launch an agent in a background thread."""
     from runner.launcher import LaunchError, launch_agent
     from runner.worktree import WorktreeError
 
     try:
-        result = await asyncio.to_thread(launch_agent, task_id, config)
+        result = await asyncio.to_thread(launch_agent, task_id, config, run_id)
         logger.info(
             "Agent completed for task %s: exit_code=%d session_id=%s",
             task_id,
@@ -142,8 +146,31 @@ async def _launch_in_thread(task_id: str, config: dict[str, Any]) -> None:
         )
     except (LaunchError, WorktreeError) as e:
         logger.error("Failed to launch agent for task %s: %s", task_id, e)
+        _fail_reserved_run(run_id, config["db_path"], str(e))
     except Exception:
         logger.exception("Unexpected error launching agent for task %s", task_id)
+        _fail_reserved_run(run_id, config["db_path"], "Unexpected error")
+
+
+def _fail_reserved_run(
+    run_id: str | None, db_path: str, error: str
+) -> None:
+    """Mark a reserved agent_runs row as failed when launch errors out."""
+    if not run_id:
+        return
+    try:
+        conn = get_connection(db_path)
+        try:
+            now = datetime.now(timezone.utc).isoformat()
+            conn.execute(
+                "UPDATE agent_runs SET completed_at = ?, exit_code = -1, error = ? WHERE id = ?",
+                (now, error, run_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        logger.exception("Failed to mark reserved run %s as failed", run_id)
 
 
 async def _cleanup_worktree_in_thread(
@@ -168,6 +195,43 @@ def _can_dispatch_task(conn: sqlite3.Connection, task_id: str) -> bool:
     if is_blocked(conn, task_id):
         return False
     return True
+
+
+def _consume_all_task_events(conn: sqlite3.Connection, task_id: str) -> None:
+    """Mark all unconsumed trigger events for a task as consumed.
+
+    Prevents the same task from being dispatched multiple times via different events.
+    """
+    conn.execute(
+        """UPDATE events
+           SET trigger_consumed = 1
+           WHERE trigger_consumed = 0
+             AND type IN ('task_created', 'task_moved', 'task_ready')
+             AND json_extract(payload, '$.task_id') = ?""",
+        (task_id,),
+    )
+    conn.commit()
+
+
+def _reserve_run(conn: sqlite3.Connection, task_id: str) -> str:
+    """Create an agent_runs row synchronously before background dispatch.
+
+    This ensures has_active_run() returns True immediately, preventing
+    duplicate dispatches from the next trigger loop iteration.
+    Returns the run_id so the launcher can reuse it.
+    """
+    task = conn.execute(
+        "SELECT step_id FROM tasks WHERE id = ?", (task_id,)
+    ).fetchone()
+    step_id = task["step_id"] if task else ""
+    run_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        "INSERT INTO agent_runs (id, task_id, step_id, started_at) VALUES (?, ?, ?, ?)",
+        (run_id, task_id, step_id, now),
+    )
+    conn.commit()
+    return run_id
 
 
 def _handle_task_ready(
@@ -279,8 +343,13 @@ async def process_triggers(db_path: str, config: dict[str, Any]) -> None:
                             if count_active_runs(conn) >= max_agents:
                                 continue  # At capacity, retry next cycle
 
-                            mark_trigger_consumed(conn, event["id"])
-                            asyncio.create_task(_launch_in_thread(task_id, config))
+                            # Consume ALL events for this task and reserve a run
+                            # row synchronously to prevent duplicate dispatches
+                            _consume_all_task_events(conn, task_id)
+                            run_id = _reserve_run(conn, task_id)
+                            asyncio.create_task(
+                                _launch_in_thread(task_id, config, run_id)
+                            )
 
                         elif should_cleanup(event, conn):
                             task = conn.execute(

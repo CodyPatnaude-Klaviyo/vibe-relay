@@ -18,7 +18,9 @@ class LaunchError(Exception):
     """Raised when agent launch fails due to invalid state or missing data."""
 
 
-def launch_agent(task_id: str, config: dict[str, Any]) -> AgentRunResult:
+def launch_agent(
+    task_id: str, config: dict[str, Any], reserved_run_id: str | None = None
+) -> AgentRunResult:
     """Launch a Claude agent for a task.
 
     Process:
@@ -81,7 +83,7 @@ def launch_agent(task_id: str, config: dict[str, Any]) -> AgentRunResult:
         base_branch = project_row["base_branch"] or config["base_branch"]
         task_dict["base_branch"] = base_branch
 
-        # Create worktree if needed
+        # Create worktree if needed, and rebase onto latest base branch
         if not task_dict.get("worktree_path"):
             worktrees_path = Path(config["worktrees_path"])
 
@@ -101,11 +103,13 @@ def launch_agent(task_id: str, config: dict[str, Any]) -> AgentRunResult:
             task_dict["worktree_path"] = str(wt_info.path)
             task_dict["branch"] = wt_info.branch
 
-        # 2b. Rebase worktree onto latest base branch to prevent merge conflicts
-        try:
-            rebase_worktree(Path(task_dict["worktree_path"]), base_branch)
-        except WorktreeError as e:
-            raise LaunchError(f"Merge conflict during rebase: {e}") from e
+            # Rebase only on fresh worktrees to pick up merged changes.
+            # Skip for existing worktrees (resumed sessions) — they may have
+            # uncommitted changes from previous steps that would block rebase.
+            try:
+                rebase_worktree(Path(task_dict["worktree_path"]), base_branch)
+            except WorktreeError as e:
+                raise LaunchError(f"Merge conflict during rebase: {e}") from e
 
         # 3. Load system prompt from step
         system_prompt = task_dict.get("system_prompt")
@@ -125,9 +129,12 @@ def launch_agent(task_id: str, config: dict[str, Any]) -> AgentRunResult:
         # 4. Build prompt
         full_prompt = build_prompt(task_dict, comment_dicts, system_prompt)
 
-        # 5. Record run start
+        # 5. Record run start (reuse reserved run_id if provided by trigger processor)
         step_id = task_dict["step_id"]
-        run_id = start_run(conn, task_id, step_id)
+        if reserved_run_id:
+            run_id = reserved_run_id
+        else:
+            run_id = start_run(conn, task_id, step_id)
 
         # 6-7. Execute Claude subprocess
         existing_session_id = task_dict.get("session_id")
