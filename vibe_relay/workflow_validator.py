@@ -3,7 +3,7 @@
 Validates that workflow steps are properly configured and follow conventions.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 
 
 class WorkflowValidationError(Exception):
